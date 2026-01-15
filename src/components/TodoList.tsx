@@ -72,7 +72,7 @@ const TodoList = ({
     <div className="app-shell">
       <div className="app-panel">
         <div className="header-row">
-          <h1 className="title">รายการงานของฉัน</h1>
+          <h1 className="title">To Do List</h1>
           <div className="header-actions">
             <input
               ref={fileInputRef}
