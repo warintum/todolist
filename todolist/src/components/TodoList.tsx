@@ -157,8 +157,7 @@ const TodoList = ({
                 <Filter className="w-4 h-4" />
                 {filterType === 'all' ? 'ทั้งหมด' : filterType === 'active' ? 'กำลังทำ' : 'เสร็จแล้ว'}
               </button>
-            ))}
-          </div>
+            ))}            
           <select
             className="select month-select"
             value={selectedMonth}
@@ -171,6 +170,7 @@ const TodoList = ({
               </option>
             ))}
           </select>
+          </div>
         </div>
 
         <div className="list">
