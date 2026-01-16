@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun, Menu, Download, Upload } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Download, Upload } from 'lucide-react';
 import TodoItem from './TodoItem';
 
 interface TodoListProps {
