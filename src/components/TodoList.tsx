@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Menu, Download, Upload } from 'lucide-react';
 import TodoItem from './TodoItem';
 
 interface TodoListProps {
@@ -87,17 +87,17 @@ const TodoList = ({
                 }
               }}
             />
-            <button type="button" className="icon-button" onClick={() => fileInputRef.current?.click()}>
-              นำเข้า CSV
+            <button type="button" className="icon-button" onClick={() => fileInputRef.current?.click()} title="นำเข้า CSV">
+              <Upload className="w-4 h-4" />
             </button>
-            <button type="button" className="icon-button" onClick={onExportCSV}>
-              ส่งออก CSV
+            <button type="button" className="icon-button" onClick={onExportCSV} title="ส่งออก CSV">
+              <Download className="w-4 h-4" />
             </button>
-            <button onClick={onToggleDarkMode} className="icon-button" aria-label="toggle theme">
+            <button onClick={onToggleDarkMode} className="icon-button" aria-label="toggle theme" title={isDarkMode ? "โหมดกลางวัน" : "โหมดกลางคืน"}>
               {isDarkMode ? (
-                <Sun className="w-5 h-5" />
+                <Sun className="w-4 h-4" />
               ) : (
-                <Moon className="w-5 h-5" />
+                <Moon className="w-4 h-4" />
               )}
             </button>
           </div>

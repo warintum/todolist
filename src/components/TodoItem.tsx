@@ -35,7 +35,6 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
   const createdAtLabel = new Date(todo.createdAt).toLocaleDateString('th-TH', {
     day: '2-digit',
     month: 'short',
-    year: 'numeric',
   });
 
   return (
@@ -51,7 +50,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
       
       <div className="flex-1">
         {isEditing ? (
-          <div className="flex items-center gap-2">
+          <div className="edit-row">
             <input
               type="text"
               value={editText}
@@ -62,36 +61,41 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
               }}
               className="input"
               autoFocus
+              placeholder="แก้ไขข้อความ..."
             />
-            <input
-              type="date"
-              value={editDate}
-              onChange={(e) => setEditDate(e.target.value)}
-              className="input"
-            />
-            <select
-              value={editPriority}
-              onChange={(e) => setEditPriority(e.target.value as 'low' | 'medium' | 'high')}
-              className="select"
-            >
-              <option value="low">ต่ำ</option>
-              <option value="medium">ปานกลาง</option>
-              <option value="high">สูง</option>
-            </select>
-            <button
-              onClick={handleSave}
-              className="icon-btn"
-              type="button"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleCancel}
-              className="icon-btn"
-              type="button"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="edit-row-secondary">
+              <input
+                type="date"
+                value={editDate}
+                onChange={(e) => setEditDate(e.target.value)}
+                className="input"
+              />
+              <select
+                value={editPriority}
+                onChange={(e) => setEditPriority(e.target.value as 'low' | 'medium' | 'high')}
+                className="select"
+              >
+                <option value="low">ต่ำ</option>
+                <option value="medium">ปานกลาง</option>
+                <option value="high">สูง</option>
+              </select>
+              <button
+                onClick={handleSave}
+                className="icon-btn"
+                type="button"
+                title="บันทึก"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleCancel}
+                className="icon-btn"
+                type="button"
+                title="ยกเลิก"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="todo-content" onClick={() => setIsEditing(true)}>
@@ -117,20 +121,24 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
         )}>
           {todo.priority === 'high' ? 'สูง' : todo.priority === 'medium' ? 'ปานกลาง' : 'ต่ำ'}
         </span>
-        <button
-          onClick={() => setIsEditing(true)}
-          className="icon-btn"
-          type="button"
-        >
-          <Edit2 className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => onDelete(todo.id)}
-          className="icon-btn"
-          type="button"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="mobile-actions">
+          <button
+            onClick={() => setIsEditing(true)}
+            className="icon-btn"
+            type="button"
+            title="แก้ไข"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => onDelete(todo.id)}
+            className="icon-btn"
+            type="button"
+            title="ลบ"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
