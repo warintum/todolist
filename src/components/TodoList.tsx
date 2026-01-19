@@ -88,10 +88,10 @@ const TodoList = ({
               }}
             />
             <button type="button" className="icon-button" onClick={() => fileInputRef.current?.click()} title="นำเข้า CSV">
-              <Upload className="w-4 h-4" />
+              <Download className="w-4 h-4" />
             </button>
             <button type="button" className="icon-button" onClick={onExportCSV} title="ส่งออก CSV">
-              <Download className="w-4 h-4" />
+              <Upload className="w-4 h-4" />
             </button>
             <button onClick={onToggleDarkMode} className="icon-button" aria-label="toggle theme" title={isDarkMode ? "โหมดกลางวัน" : "โหมดกลางคืน"}>
               {isDarkMode ? (
@@ -153,11 +153,18 @@ const TodoList = ({
                 type="button"
                 onClick={() => onFilterChange(filterType)}
                 className={cn('segmented-btn', filter === filterType && 'active')}
+                aria-label={filterType === 'all' ? 'ทั้งหมด' : filterType === 'active' ? 'กำลังทำ' : 'เสร็จแล้ว'}
               >
                 <Filter className="w-4 h-4" />
-                {filterType === 'all' ? 'ทั้งหมด' : filterType === 'active' ? 'กำลังทำ' : 'เสร็จแล้ว'}
+                <span className="filter-text-full">
+                  {filterType === 'all' ? 'ทั้งหมด' : filterType === 'active' ? 'กำลังทำ' : 'เสร็จแล้ว'}
+                </span>
+                <span className="filter-text-short">
+                  {filterType === 'all' ? 'ทั้งหมด' : filterType === 'active' ? 'ทำ' : 'เสร็จ'}
+                </span>
               </button>
-            ))}            
+            ))}
+          </div>
           <select
             className="select month-select"
             value={selectedMonth}
@@ -170,7 +177,6 @@ const TodoList = ({
               </option>
             ))}
           </select>
-          </div>
         </div>
 
         <div className="list">

@@ -45,10 +45,10 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
         aria-label={todo.completed ? 'mark as incomplete' : 'mark as complete'}
         type="button"
       >
-        {todo.completed && <Check className="w-3 h-3" />}
+        {todo.completed && <Check className="w-4 h-4" strokeWidth={3} />}
       </button>
       
-      <div className="flex-1">
+      <div className="flex-1 min-w-0">
         {isEditing ? (
           <div className="edit-row">
             <input
@@ -69,11 +69,13 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
                 className="input"
+                aria-label="เลือกวันที่"
               />
               <select
                 value={editPriority}
                 onChange={(e) => setEditPriority(e.target.value as 'low' | 'medium' | 'high')}
                 className="select"
+                aria-label="เลือกความสำคัญ"
               >
                 <option value="low">ต่ำ</option>
                 <option value="medium">ปานกลาง</option>
@@ -84,6 +86,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
                 className="icon-btn"
                 type="button"
                 title="บันทึก"
+                aria-label="บันทึก"
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -92,13 +95,26 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
                 className="icon-btn"
                 type="button"
                 title="ยกเลิก"
+                aria-label="ยกเลิก"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
         ) : (
-          <div className="todo-content" onClick={() => setIsEditing(true)}>
+          <div 
+            className="todo-content" 
+            onClick={() => setIsEditing(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setIsEditing(true);
+              }
+            }}
+            aria-label="คลิกเพื่อแก้ไข"
+          >
             <span
               className={cn(
                 'todo-text',
@@ -112,29 +128,42 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
         )}
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <span className={cn(
           'badge',
           todo.priority === 'high' && 'high',
           todo.priority === 'medium' && 'medium',
           todo.priority === 'low' && 'low'
         )}>
-          {todo.priority === 'high' ? 'สูง' : todo.priority === 'medium' ? 'ปานกลาง' : 'ต่ำ'}
+          <span className="badge-text-full">
+            {todo.priority === 'high' ? 'สูง' : todo.priority === 'medium' ? 'ปานกลาง' : 'ต่ำ'}
+          </span>
+          <span className="badge-text-short">
+            {todo.priority === 'high' ? 'สูง' : todo.priority === 'medium' ? 'กลาง' : 'ต่ำ'}
+          </span>
         </span>
         <div className="mobile-actions">
           <button
-            onClick={() => setIsEditing(true)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsEditing(true);
+            }}
             className="icon-btn"
             type="button"
             title="แก้ไข"
+            aria-label="แก้ไข"
           >
             <Edit2 className="w-4 h-4" />
           </button>
           <button
-            onClick={() => onDelete(todo.id)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(todo.id);
+            }}
             className="icon-btn"
             type="button"
             title="ลบ"
+            aria-label="ลบ"
           >
             <Trash2 className="w-4 h-4" />
           </button>
