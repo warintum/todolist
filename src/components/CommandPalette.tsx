@@ -20,12 +20,13 @@ interface CommandPaletteProps {
   todos: Todo[];
   filter: TodoFilter;
   isDarkMode: boolean;
+  userName?: string;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
   onToggleTodo: (id: string) => void;
   onExportCSV: () => void;
   onImportCSV: () => void;
-  onExportExcel: () => void;
+  onExportExcel: (monthLabel?: string, userNameForExport?: string) => void;
   onAddTodo: () => void;
 }
 
@@ -44,6 +45,7 @@ export const CommandPalette = ({
   todos,
   filter,
   isDarkMode,
+  userName,
   onFilterChange,
   onToggleDarkMode,
   onToggleTodo,
@@ -159,7 +161,7 @@ export const CommandPalette = ({
         title: 'ส่งออก Excel',
         icon: <FileSpreadsheet className="w-5 h-5" />,
         action: () => {
-          onExportExcel();
+          onExportExcel(undefined, userName);
         },
       },
       {

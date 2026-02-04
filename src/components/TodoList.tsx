@@ -1,21 +1,21 @@
 import { useState, useRef, type FormEvent, useCallback } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet, X, User } from 'lucide-react';
 import TodoItem from './TodoItem';
 
 interface TodoListProps {
   todos: Todo[];
   filter: TodoFilter;
   isDarkMode: boolean;
-  userName: string;
+  userName?: string;
   onAddTodo: (text: string, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
   onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onExportCSV: () => void;
   onImportCSV: (file: File) => void;
-  onExportExcel: (monthLabel?: string) => Promise<void>;
+  onExportExcel: (monthLabel?: string, userNameForExport?: string) => Promise<void>;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
   onUserNameChange: (name: string) => void;
@@ -41,6 +41,8 @@ const TodoList = ({
   const [newTodoPriority, setNewTodoPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [newTodoNote, setNewTodoNote] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('all');
+  const [isUserNameModalOpen, setIsUserNameModalOpen] = useState(false);
+  const [tempUserName, setTempUserName] = useState(userName || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -129,11 +131,9 @@ const TodoList = ({
             <button type="button" className="icon-button" onClick={onExportCSV} title="ส่งออก CSV">
               <Upload className="w-4 h-4" />
             </button>
-            <button type="button" className="icon-button" onClick={async () => {
-              const monthLabel = selectedMonth === 'all' 
-                ? undefined 
-                : monthOptions.find(o => o.key === selectedMonth)?.label;
-              await onExportExcel(monthLabel);
+            <button type="button" className="icon-button" onClick={() => {
+              setTempUserName(userName || '');
+              setIsUserNameModalOpen(true);
             }} title="ส่งออก Excel">
               <FileSpreadsheet className="w-4 h-4" />
             </button>
@@ -144,22 +144,6 @@ const TodoList = ({
                 <Moon className="w-4 h-4" />
               )}
             </button>
-          </div>
-        </div>
-
-        {/* User Name Card */}
-        <div className="card form-card">
-          <div className="user-input-row">
-            <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
-              ชื่อผู้ใช้งาน:
-            </span>
-            <input
-              type="text"
-              value={userName}
-              onChange={(e) => onUserNameChange(e.target.value)}
-              placeholder="กรอกชื่อ - นามสกุล..."
-              className="input"
-            />
           </div>
         </div>
 
@@ -280,6 +264,76 @@ const TodoList = ({
           )}
         </div>
       </div>
+
+      {/* User Name Modal for Excel Export */}
+      {isUserNameModalOpen && (
+        <div className="modal-overlay" onClick={() => setIsUserNameModalOpen(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-icon">
+                <User className="w-6 h-6" />
+              </div>
+              <h3 className="modal-title">กรอกชื่อผู้ใช้งาน</h3>
+              <p className="modal-subtitle">ชื่อจะปรากฏในรายงาน Excel ที่ส่งออก</p>
+              <button 
+                onClick={() => setIsUserNameModalOpen(false)}
+                className="modal-close"
+                aria-label="ปิด"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-input-group">
+                <label htmlFor="userNameInput" className="modal-label">
+                  ชื่อ - นามสกุล
+                </label>
+                <input
+                  id="userNameInput"
+                  type="text"
+                  value={tempUserName}
+                  onChange={(e) => setTempUserName(e.target.value)}
+                  placeholder="กรอกชื่อผู้ใช้งาน..."
+                  className="modal-input"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      onUserNameChange(tempUserName);
+                      setIsUserNameModalOpen(false);
+                      const monthLabel = selectedMonth === 'all' 
+                        ? undefined 
+                        : monthOptions.find(o => o.key === selectedMonth)?.label;
+                      onExportExcel(monthLabel, tempUserName);
+                    }
+                  }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                onClick={() => setIsUserNameModalOpen(false)}
+                className="modal-btn modal-btn-secondary"
+              >
+                ยกเลิก
+              </button>
+              <button 
+                onClick={() => {
+                  onUserNameChange(tempUserName);
+                  setIsUserNameModalOpen(false);
+                  const monthLabel = selectedMonth === 'all' 
+                    ? undefined 
+                    : monthOptions.find(o => o.key === selectedMonth)?.label;
+                  onExportExcel(monthLabel, tempUserName);
+                }}
+                className="modal-btn modal-btn-primary"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                ส่งออก Excel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

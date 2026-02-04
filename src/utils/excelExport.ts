@@ -19,7 +19,7 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
   // กำหนดความกว้างคอลัมน์
   worksheet.columns = [
     { width: 8 },   // A: ลำดับ
-    { width: 80 },  // B: รายละเอียด
+    { width: 85 },  // B: รายละเอียด
     { width: 15 },  // C: วันที่
     { width: 25 },  // D: หมายเหตุ
   ];

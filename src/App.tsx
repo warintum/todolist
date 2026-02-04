@@ -418,9 +418,11 @@ function App() {
       });
   };
 
-  const exportTodosAsExcelHandler = async (monthLabel?: string) => {
+  const exportTodosAsExcelHandler = async (monthLabel?: string, userNameForExport?: string) => {
     try {
-      await exportTodosAsExcel(todos, monthLabel, userName);
+      // Use the provided userNameForExport if available, otherwise fall back to state
+      const nameToUse = userNameForExport !== undefined ? userNameForExport : userName;
+      await exportTodosAsExcel(todos, monthLabel, nameToUse);
       showToast('📊 ส่งออก Excel สำเร็จ', 'success', 3000);
     } catch (error) {
       console.error('Failed to export Excel:', error);
@@ -471,6 +473,7 @@ function App() {
         todos={todos}
         filter={filter}
         isDarkMode={isDarkMode}
+        userName={userName}
         onFilterChange={setFilter}
         onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         onToggleTodo={toggleTodo}
