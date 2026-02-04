@@ -165,15 +165,15 @@ const TodoList = ({
 
         {/* Stats */}
         <div className="stats-grid">
-          <div className="card stat-card">
+          <div className="card stat-card total">
             <div className="stat-number">{todos.length}</div>
             <div className="stat-label">ทั้งหมด</div>
           </div>
-          <div className="card stat-card">
+          <div className="card stat-card active">
             <div className="stat-number warning">{activeTodoCount}</div>
             <div className="stat-label">กำลังทำ</div>
           </div>
-          <div className="card stat-card">
+          <div className="card stat-card completed">
             <div className="stat-number success">{completedTodoCount}</div>
             <div className="stat-label">เสร็จแล้ว</div>
           </div>
@@ -267,10 +267,11 @@ const TodoList = ({
               {filter === 'completed' && 'ยังไม่มีรายการงานที่เสร็จแล้ว'}
             </div>
           ) : (
-            filteredTodos.map((todo) => (
+            filteredTodos.map((todo, index) => (
               <TodoItem
                 key={todo.id}
                 todo={todo}
+                index={index}
                 onToggle={onToggleTodo}
                 onDelete={onDeleteTodo}
                 onEdit={onEditTodo}

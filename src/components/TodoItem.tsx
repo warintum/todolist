@@ -5,12 +5,13 @@ import { Check, Trash2, Edit2, X, Calendar } from 'lucide-react';
 
 interface TodoItemProps {
   todo: Todo;
+  index: number;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => void;
 }
 
-const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
+const TodoItem = ({ todo, index, onToggle, onDelete, onEdit }: TodoItemProps) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(todo.text);
   const [editDate, setEditDate] = useState(
@@ -85,8 +86,14 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
     year: 'numeric',
   });
 
+  // Calculate stagger delay (max 10 items for stagger effect)
+  const staggerDelay = Math.min(index * 0.05, 0.5);
+
   return (
-    <div className="card todo-item">
+    <div 
+      className="card todo-item" 
+      style={{ animationDelay: `${staggerDelay}s` }}
+    >
       {/* Checkbox */}
       <button
         onClick={() => onToggle(todo.id)}
