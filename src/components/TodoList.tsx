@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun, Download, Upload } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet } from 'lucide-react';
 import TodoItem from './TodoItem';
 
 interface TodoListProps {
@@ -14,6 +14,7 @@ interface TodoListProps {
   onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high') => void;
   onExportCSV: () => void;
   onImportCSV: (file: File) => void;
+  onExportExcel: (monthLabel?: string) => void;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
 }
@@ -28,6 +29,7 @@ const TodoList = ({
   onEditTodo,
   onExportCSV,
   onImportCSV,
+  onExportExcel,
   onFilterChange,
   onToggleDarkMode,
 }: TodoListProps) => {
@@ -92,6 +94,14 @@ const TodoList = ({
             </button>
             <button type="button" className="icon-button" onClick={onExportCSV} title="ส่งออก CSV">
               <Upload className="w-4 h-4" />
+            </button>
+            <button type="button" className="icon-button" onClick={() => {
+              const monthLabel = selectedMonth === 'all' 
+                ? undefined 
+                : monthOptions.find(o => o.key === selectedMonth)?.label;
+              onExportExcel(monthLabel);
+            }} title="ส่งออก Excel">
+              <FileSpreadsheet className="w-4 h-4" />
             </button>
             <button onClick={onToggleDarkMode} className="icon-button" aria-label="toggle theme" title={isDarkMode ? "โหมดกลางวัน" : "โหมดกลางคืน"}>
               {isDarkMode ? (

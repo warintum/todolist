@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Todo, TodoFilter } from './utils/todoTypes';
 import TodoList from './components/TodoList';
+import { exportTodosAsExcel } from './utils/excelExport';
 
 // IndexedDB implementation
 const DB_NAME = 'TodoListDB';
@@ -328,6 +329,10 @@ function App() {
     }
   };
 
+  const exportTodosAsExcelHandler = (monthLabel?: string) => {
+    exportTodosAsExcel(todos, monthLabel);
+  };
+
   return (
     <TodoList
       todos={todos}
@@ -339,6 +344,7 @@ function App() {
       onEditTodo={editTodo}
       onExportCSV={exportTodosAsCSV}
       onImportCSV={importTodosFromCSV}
+      onExportExcel={exportTodosAsExcelHandler}
       onFilterChange={setFilter}
       onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
     />
