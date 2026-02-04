@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Todo, TodoFilter } from './utils/todoTypes';
 import TodoList from './components/TodoList';
 import { exportTodosAsExcel } from './utils/excelExport';
+import { useToast } from './contexts/ToastContext';
+import { CommandPalette } from './components/CommandPalette';
+import { useConfetti } from './hooks/useConfetti';
 
 // IndexedDB implementation
 const DB_NAME = 'TodoListDB';
@@ -192,6 +195,13 @@ function App() {
   });
   const [userName, setUserName] = useState(() => getStoredUserName());
   const [hydrated, setHydrated] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const { showToast } = useToast();
+  const { triggerSuccess, triggerCelebration } = useConfetti();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Store deleted todo for undo
+  const deletedTodoRef = useRef<{ todo: Todo; index: number } | null>(null);
 
   // Load todos on mount
   useEffect(() => {
@@ -202,7 +212,6 @@ function App() {
     };
     
     loadTodos();
-
   }, []);
 
   // Save todos whenever they change
@@ -215,13 +224,10 @@ function App() {
   useEffect(() => {
     try {
       localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-      console.log('Dark mode saved to localStorage');
     } catch (error) {
       console.error('Failed to save dark mode to localStorage:', error);
-      // Fallback to sessionStorage
       try {
         sessionStorage.setItem('darkMode', JSON.stringify(isDarkMode));
-        console.log('Dark mode saved to sessionStorage as fallback');
       } catch (sessionError) {
         console.error('Failed to save dark mode to sessionStorage:', sessionError);
       }
@@ -238,17 +244,37 @@ function App() {
   useEffect(() => {
     try {
       localStorage.setItem('userName', userName);
-      console.log('User name saved to localStorage');
     } catch (error) {
       console.error('Failed to save user name to localStorage:', error);
       try {
         sessionStorage.setItem('userName', userName);
-        console.log('User name saved to sessionStorage as fallback');
       } catch (sessionError) {
         console.error('Failed to save user name to sessionStorage:', sessionError);
       }
     }
   }, [userName]);
+
+  // Check for 100% completion
+  useEffect(() => {
+    if (todos.length > 0 && todos.every(t => t.completed)) {
+      triggerCelebration();
+      showToast('🎉 ยินดีด้วย! คุณทำงานครบทุกรายการแล้ว', 'success', 5000);
+    }
+  }, [todos, triggerCelebration, showToast]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command Palette: Ctrl/Cmd + K
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const addTodo = (text: string, priority: 'low' | 'medium' | 'high', note?: string) => {
     const newTodo: Todo = {
@@ -260,19 +286,46 @@ function App() {
       note
     };
     setTodos((prev) => [newTodo, ...prev]);
+    showToast('✅ เพิ่มรายการสำเร็จ', 'success', 2000);
   };
 
-  const toggleTodo = (id: string) => {
-    setTodos((prev) =>
-      prev.map((todo) =>
+  const toggleTodo = useCallback((id: string) => {
+    setTodos((prev) => {
+      const todo = prev.find(t => t.id === id);
+      const newCompleted = !todo?.completed;
+      
+      if (newCompleted && todo?.priority === 'high') {
+        triggerSuccess();
+        showToast('🎊 เสร็จงานสำคัญแล้ว!', 'success', 3000);
+      }
+      
+      return prev.map((todo) =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
-      )
-    );
-  };
+      );
+    });
+  }, [showToast, triggerSuccess]);
 
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
-  };
+  const deleteTodo = useCallback((id: string) => {
+    setTodos((prev) => {
+      const index = prev.findIndex(t => t.id === id);
+      const todo = prev[index];
+      deletedTodoRef.current = { todo, index };
+      return prev.filter((todo) => todo.id !== id);
+    });
+    
+    showToast('🗑️ ลบรายการแล้ว', 'undo', 5000, () => {
+      // Undo action
+      if (deletedTodoRef.current) {
+        setTodos((prev) => {
+          const { todo, index } = deletedTodoRef.current!;
+          const newTodos = [...prev];
+          newTodos.splice(index, 0, todo);
+          return newTodos;
+        });
+        showToast('↩️ กู้คืนรายการแล้ว', 'info', 2000);
+      }
+    });
+  }, [showToast]);
 
   const editTodo = (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => {
     setTodos((prev) =>
@@ -280,13 +333,15 @@ function App() {
         todo.id === id ? { ...todo, text, createdAt, priority, note } : todo
       )
     );
+    showToast('✏️ แก้ไขรายการสำเร็จ', 'success', 2000);
   };
 
   const exportTodosAsCSV = () => {
     if (todos.length === 0) {
-      console.warn('No todos to export');
+      showToast('⚠️ ไม่มีรายการให้ส่งออก', 'error', 3000);
       return;
     }
+    
     const rows = todos.map((todo) => [
       escapeCSV(todo.id),
       escapeCSV(todo.text),
@@ -308,12 +363,14 @@ function App() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      showToast('📤 ส่งออก CSV สำเร็จ', 'success', 3000);
     } catch (error) {
       console.error('Failed to export CSV:', error);
+      showToast('❌ ส่งออก CSV ล้มเหลว', 'error', 3000);
     }
   };
 
-  const importTodosFromCSV = async (file: File) => {
+  const importTodosFromCSV = (file: File) => {
     const readFile = (targetFile: File) =>
       new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -322,66 +379,113 @@ function App() {
         reader.readAsText(targetFile, 'utf-8');
       });
 
-    try {
-      const text = await readFile(file);
-      const lines = text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
+    readFile(file)
+      .then((text) => {
+        const lines = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
 
-      if (lines.length === 0) {
-        console.warn('CSV file is empty');
-        return;
-      }
+        if (lines.length === 0) {
+          showToast('⚠️ ไฟล์ CSV ว่างเปล่า', 'error', 3000);
+          return;
+        }
 
-      const headerLine = lines.shift()!;
-      const headers = splitCSVLine(headerLine);
-      const expected = csvHeaders.join(',');
-      if (headers.join(',') !== expected) {
-        console.warn('CSV header mismatch. Expected:', expected, 'got:', headers.join(','));
-      }
+        const headerLine = lines.shift()!;
+        // Skip header validation for now
+        splitCSVLine(headerLine);
 
-      const parsedTodos: Todo[] = lines.map((line) => {
-        const values = splitCSVLine(line);
-        const [id, textValue, completedValue, createdAtValue, priorityValue, noteValue] = values;
+        const parsedTodos: Todo[] = lines.map((line) => {
+          const values = splitCSVLine(line);
+          const [id, textValue, completedValue, createdAtValue, priorityValue, noteValue] = values;
 
-        return {
-          id: id || Date.now().toString(),
-          text: textValue || '',
-          completed: completedValue === 'true',
-          createdAt: createdAtValue ? new Date(createdAtValue) : new Date(),
-          priority: (priorityValue as Todo['priority']) || 'medium',
-          note: noteValue || undefined,
-        };
+          return {
+            id: id || Date.now().toString(),
+            text: textValue || '',
+            completed: completedValue === 'true',
+            createdAt: createdAtValue ? new Date(createdAtValue) : new Date(),
+            priority: (priorityValue as Todo['priority']) || 'medium',
+            note: noteValue || undefined,
+          };
+        });
+
+        setTodos(parsedTodos);
+        showToast('📥 นำเข้าข้อมูลสำเร็จ', 'success', 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to import CSV:', error);
+        showToast('❌ นำเข้าข้อมูลล้มเหลว', 'error', 3000);
       });
-
-      setTodos(parsedTodos);
-    } catch (error) {
-      console.error('Failed to import CSV:', error);
-    }
   };
 
   const exportTodosAsExcelHandler = async (monthLabel?: string) => {
-    await exportTodosAsExcel(todos, monthLabel, userName);
+    try {
+      await exportTodosAsExcel(todos, monthLabel, userName);
+      showToast('📊 ส่งออก Excel สำเร็จ', 'success', 3000);
+    } catch (error) {
+      console.error('Failed to export Excel:', error);
+      showToast('❌ ส่งออก Excel ล้มเหลว', 'error', 3000);
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
   };
 
   return (
-    <TodoList
-      todos={todos}
-      filter={filter}
-      isDarkMode={isDarkMode}
-      userName={userName}
-      onAddTodo={addTodo}
-      onToggleTodo={toggleTodo}
-      onDeleteTodo={deleteTodo}
-      onEditTodo={editTodo}
-      onExportCSV={exportTodosAsCSV}
-      onImportCSV={importTodosFromCSV}
-      onExportExcel={exportTodosAsExcelHandler}
-      onFilterChange={setFilter}
-      onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
-      onUserNameChange={setUserName}
-    />
+    <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".csv"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            importTodosFromCSV(file);
+            event.target.value = '';
+          }
+        }}
+      />
+      
+      <TodoList
+        todos={todos}
+        filter={filter}
+        isDarkMode={isDarkMode}
+        userName={userName}
+        onAddTodo={addTodo}
+        onToggleTodo={toggleTodo}
+        onDeleteTodo={deleteTodo}
+        onEditTodo={editTodo}
+        onExportCSV={exportTodosAsCSV}
+        onImportCSV={handleImportClick}
+        onExportExcel={exportTodosAsExcelHandler}
+        onFilterChange={setFilter}
+        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+        onUserNameChange={setUserName}
+      />
+      
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        todos={todos}
+        filter={filter}
+        isDarkMode={isDarkMode}
+        onFilterChange={setFilter}
+        onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+        onToggleTodo={toggleTodo}
+        onExportCSV={exportTodosAsCSV}
+        onImportCSV={handleImportClick}
+        onExportExcel={exportTodosAsExcelHandler}
+        onAddTodo={() => {
+          // Focus on the add todo textarea
+          const textarea = document.querySelector('.form-card textarea') as HTMLTextAreaElement;
+          if (textarea) {
+            textarea.focus();
+          }
+        }}
+      />
+    </>
   );
 }
 
