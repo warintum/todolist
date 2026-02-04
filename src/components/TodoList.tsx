@@ -15,7 +15,7 @@ interface TodoListProps {
   onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onExportCSV: () => void;
   onImportCSV: (file: File) => void;
-  onExportExcel: (monthLabel?: string, userNameForExport?: string) => Promise<void>;
+  onExportExcel: (todosToExport: Todo[], monthLabel?: string, userNameForExport?: string) => Promise<void>;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
   onUserNameChange: (name: string) => void;
@@ -303,7 +303,7 @@ const TodoList = ({
                       const monthLabel = selectedMonth === 'all' 
                         ? undefined 
                         : monthOptions.find(o => o.key === selectedMonth)?.label;
-                      onExportExcel(monthLabel, tempUserName);
+                      onExportExcel(filteredTodos, monthLabel, tempUserName);
                     }
                   }}
                 />
@@ -323,7 +323,7 @@ const TodoList = ({
                   const monthLabel = selectedMonth === 'all' 
                     ? undefined 
                     : monthOptions.find(o => o.key === selectedMonth)?.label;
-                  onExportExcel(monthLabel, tempUserName);
+                  onExportExcel(filteredTodos, monthLabel, tempUserName);
                 }}
                 className="modal-btn modal-btn-primary"
               >

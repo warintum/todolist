@@ -1,20 +1,69 @@
 import ExcelJS from 'exceljs';
 import type { Todo } from './todoTypes';
 
-export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, userName?: string) => {
-  if (todos.length === 0) {
-    console.warn('No todos to export');
-    return;
+// Helper function to convert Thai month name to month number
+const thaiMonthToNumber = (monthName: string): string => {
+  const thaiMonths: Record<string, string> = {
+    'มกราคม': '01',
+    'กุมภาพันธ์': '02',
+    'มีนาคม': '03',
+    'เมษายน': '04',
+    'พฤษภาคม': '05',
+    'มิถุนายน': '06',
+    'กรกฎาคม': '07',
+    'สิงหาคม': '08',
+    'กันยายน': '09',
+    'ตุลาคม': '10',
+    'พฤศจิกายน': '11',
+    'ธันวาคม': '12',
+  };
+  
+  for (const [thaiMonth, number] of Object.entries(thaiMonths)) {
+    if (monthName.includes(thaiMonth)) {
+      return number;
+    }
   }
+  
+  return '00';
+};
 
-  // เรียงตามวันที่
-  const sortedTodos = [...todos].sort((a, b) => {
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
+// Helper function to extract year from monthLabel
+const extractYear = (monthLabel: string): string => {
+  const match = monthLabel.match(/\d{4}/);
+  return match ? match[0] : new Date().getFullYear().toString();
+};
 
-  // สร้าง workbook
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('รายงานการทำงาน');
+// Helper function to generate sheet name in format "MM-YYYY"
+const generateSheetName = (monthLabel?: string): string => {
+  if (!monthLabel) {
+    const now = new Date();
+    return `${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+  }
+  
+  const month = thaiMonthToNumber(monthLabel);
+  const year = extractYear(monthLabel);
+  return `${month}-${year}`;
+};
+
+// Helper function to get month key from date
+const getMonthKey = (date: Date): string => {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// Helper function to get month label in Thai
+const getMonthLabel = (date: Date): string => {
+  return date.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+};
+
+// Helper function to create a worksheet with data
+const createWorksheet = (
+  workbook: ExcelJS.Workbook,
+  sheetName: string,
+  todos: Todo[],
+  monthLabel: string,
+  userName?: string
+): void => {
+  const worksheet = workbook.addWorksheet(sheetName);
 
   // กำหนดความกว้างคอลัมน์
   worksheet.columns = [
@@ -35,9 +84,7 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
   companyCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
   // แถวที่ 2: หัวเรื่องรายงาน (merge A2:D2)
-  const reportTitle = monthLabel
-    ? `รายงานการทำงานประจำเดือน : ${monthLabel}`
-    : 'รายงานการทำงานประจำเดือน';
+  const reportTitle = `รายงานการทำงานประจำเดือน ${monthLabel}`;
   const titleRow = worksheet.addRow([reportTitle]);
   titleRow.height = 25;
   worksheet.mergeCells('A2:D2');
@@ -80,6 +127,11 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
     };
   });
 
+  // เรียงตามวันที่
+  const sortedTodos = [...todos].sort((a, b) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
   // ข้อมูลงาน (แถวที่ 6 เป็นต้นไป)
   sortedTodos.forEach((todo, index) => {
     const date = new Date(todo.createdAt);
@@ -89,18 +141,16 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
       year: 'numeric',
     });
 
-    // ใช้ note จาก field หรือเว้นว่าง
     const note = todo.note || '';
 
     const dataRow = worksheet.addRow([
-      index + 1,     // ลำดับ
-      todo.text,     // รายละเอียด
-      dateStr,       // วันที่
-      note           // หมายเหตุ
+      index + 1,
+      todo.text,
+      dateStr,
+      note
     ]);
     dataRow.height = 22;
 
-    // จัดสไตล์แต่ละเซลล์
     dataRow.eachCell((cell, colNumber) => {
       cell.border = {
         top: { style: 'thin' },
@@ -109,10 +159,6 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
         right: { style: 'thin' },
       };
 
-      // ลำดับ (คอลัมน์ 1): กึ่งกลาง
-      // รายละเอียด (คอลัมน์ 2): ชิดซ้าย
-      // วันที่ (คอลัมน์ 3): กึ่งกลาง
-      // หมายเหตุ (คอลัมน์ 4): กึ่งกลาง
       if (colNumber === 2) {
         cell.alignment = { horizontal: 'left', vertical: 'middle' };
       } else {
@@ -120,11 +166,52 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, use
       }
     });
   });
+};
+
+export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, userName?: string) => {
+  if (todos.length === 0) {
+    console.warn('No todos to export');
+    return;
+  }
+
+  const workbook = new ExcelJS.Workbook();
+
+  if (monthLabel) {
+    // กรณีเลือกเดือนเฉพาะ - สร้างชีตเดียว
+    const sheetName = generateSheetName(monthLabel);
+    createWorksheet(workbook, sheetName, todos, monthLabel, userName);
+  } else {
+    // กรณีไม่เลือกเดือน (ทั้งหมด) - แยกชีตตามเดือน
+    const groupedByMonth = new Map<string, Todo[]>();
+    
+    todos.forEach(todo => {
+      const date = new Date(todo.createdAt);
+      const monthKey = getMonthKey(date);
+      
+      if (!groupedByMonth.has(monthKey)) {
+        groupedByMonth.set(monthKey, []);
+      }
+      groupedByMonth.get(monthKey)!.push(todo);
+    });
+
+    // เรียงตามเดือน (จากน้อยไปมาก)
+    const sortedMonths = Array.from(groupedByMonth.keys()).sort();
+
+    // สร้างชีตสำหรับแต่ละเดือน
+    sortedMonths.forEach(monthKey => {
+      const monthTodos = groupedByMonth.get(monthKey)!;
+      const firstTodo = monthTodos[0];
+      const monthLabelForSheet = getMonthLabel(new Date(firstTodo.createdAt));
+      const sheetName = monthKey; // Format: "YYYY-MM"
+      
+      createWorksheet(workbook, sheetName, monthTodos, monthLabelForSheet, userName);
+    });
+  }
 
   // สร้างชื่อไฟล์
   const fileName = monthLabel
     ? `รายงานการทำงาน-${monthLabel.replace(/\s+/g, '-')}.xlsx`
-    : `รายงานการทำงาน-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    : `รายงานการทำงาน-ทุกเดือน-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
   // ดาวน์โหลดไฟล์
   const buffer = await workbook.xlsx.writeBuffer();

@@ -26,7 +26,7 @@ interface CommandPaletteProps {
   onToggleTodo: (id: string) => void;
   onExportCSV: () => void;
   onImportCSV: () => void;
-  onExportExcel: (monthLabel?: string, userNameForExport?: string) => void;
+  onExportExcel: (todosToExport: Todo[], monthLabel?: string, userNameForExport?: string) => void;
   onAddTodo: () => void;
 }
 
@@ -161,7 +161,7 @@ export const CommandPalette = ({
         title: 'ส่งออก Excel',
         icon: <FileSpreadsheet className="w-5 h-5" />,
         action: () => {
-          onExportExcel(undefined, userName);
+          onExportExcel(todos, undefined, userName);
         },
       },
       {
