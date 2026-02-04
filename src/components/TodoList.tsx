@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent } from 'react';
+import { useState, useRef, type FormEvent, useCallback } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
 import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet } from 'lucide-react';
@@ -42,6 +42,14 @@ const TodoList = ({
   const [newTodoNote, setNewTodoNote] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  const autoResizeTextarea = useCallback((element: HTMLTextAreaElement | null) => {
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = Math.min(element.scrollHeight, 200) + 'px';
+  }, []);
 
   const monthOptions = todos
     .map((todo) => {
@@ -60,6 +68,25 @@ const TodoList = ({
       setNewTodoText('');
       setNewTodoPriority('medium');
       setNewTodoNote('');
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }
+  };
+
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setNewTodoText(e.target.value);
+    autoResizeTextarea(e.target);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Submit on Ctrl+Enter or Cmd+Enter
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (newTodoText.trim()) {
+        handleSubmit(e as unknown as FormEvent);
+      }
     }
   };
 
@@ -79,6 +106,7 @@ const TodoList = ({
   return (
     <div className="app-shell">
       <div className="app-panel">
+        {/* Header */}
         <div className="header-row">
           <h1 className="title">To Do List</h1>
           <div className="header-actions">
@@ -119,68 +147,83 @@ const TodoList = ({
           </div>
         </div>
 
+        {/* User Name Card */}
         <div className="card form-card">
-          <div className="form-row">
-            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">ชื่อผู้ใช้งาน:</span>
+          <div className="user-input-row">
+            <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-secondary)' }}>
+              ชื่อผู้ใช้งาน:
+            </span>
             <input
               type="text"
               value={userName}
               onChange={(e) => onUserNameChange(e.target.value)}
               placeholder="กรอกชื่อ - นามสกุล..."
-              className="input flex-1"
+              className="input"
             />
           </div>
         </div>
 
+        {/* Stats */}
         <div className="stats-grid">
-          <div className="card stat-card tint-blue">
-            <div className="stat-number blue">{todos.length}</div>
+          <div className="card stat-card">
+            <div className="stat-number">{todos.length}</div>
             <div className="stat-label">ทั้งหมด</div>
           </div>
-          <div className="card stat-card tint-orange">
-            <div className="stat-number orange">{activeTodoCount}</div>
+          <div className="card stat-card">
+            <div className="stat-number warning">{activeTodoCount}</div>
             <div className="stat-label">กำลังทำ</div>
           </div>
-          <div className="card stat-card tint-green">
-            <div className="stat-number green">{completedTodoCount}</div>
+          <div className="card stat-card">
+            <div className="stat-number success">{completedTodoCount}</div>
             <div className="stat-label">เสร็จแล้ว</div>
           </div>
         </div>
 
+        {/* Add Todo Form - Multi-line Textarea */}
         <form onSubmit={handleSubmit}>
           <div className="card form-card">
             <div className="form-row">
-              <input
-                type="text"
-                value={newTodoText}
-                onChange={(e) => setNewTodoText(e.target.value)}
-                placeholder="เพิ่มรายการงานใหม่..."
-                className="input"
-              />
+              <div style={{ flex: 2, minWidth: 0 }}>
+                <textarea
+                  ref={textareaRef}
+                  value={newTodoText}
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleKeyDown}
+                  placeholder="เพิ่มรายการงานใหม่... (กด Ctrl+Enter เพื่อบันทึก)"
+                  className="textarea"
+                  rows={1}
+                />
+              </div>
               <select
                 value={newTodoPriority}
                 onChange={(e) => setNewTodoPriority(e.target.value as 'low' | 'medium' | 'high')}
                 className="select"
+                style={{ flexShrink: 0 }}
               >
                 <option value="low">ต่ำ</option>
                 <option value="medium">ปานกลาง</option>
                 <option value="high">สูง</option>
               </select>
-              <input
-                type="text"
+            </div>
+            <div style={{ marginTop: 12 }}>
+              <textarea
                 value={newTodoNote}
                 onChange={(e) => setNewTodoNote(e.target.value)}
-                placeholder="หมายเหตุ..."
-                className="input"
+                placeholder="หมายเหตุ (ไม่บังคับ)..."
+                className="textarea textarea-sm"
+                rows={1}
               />
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
               <button type="submit" className="primary-button">
                 <Plus className="w-4 h-4" />
-                เพิ่ม
+                เพิ่มรายการ
               </button>
             </div>
           </div>
         </form>
 
+        {/* Filter & Month Select */}
         <div className="card segmented-row">
           <div className="segmented">
             {(['all', 'active', 'completed'] as TodoFilter[]).map((filterType) => (
@@ -215,6 +258,7 @@ const TodoList = ({
           </select>
         </div>
 
+        {/* Todo List */}
         <div className="list">
           {filteredTodos.length === 0 ? (
             <div className="card empty">

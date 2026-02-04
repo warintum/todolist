@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Todo } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Check, Trash2, Edit2, X } from 'lucide-react';
+import { Check, Trash2, Edit2, X, Calendar } from 'lucide-react';
 
 interface TodoItemProps {
   todo: Todo;
@@ -18,6 +18,24 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
   );
   const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high'>(todo.priority);
   const [editNote, setEditNote] = useState(todo.note || '');
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea
+  const autoResizeTextarea = useCallback((element: HTMLTextAreaElement | null) => {
+    if (!element) return;
+    element.style.height = 'auto';
+    element.style.height = Math.min(element.scrollHeight, 200) + 'px';
+  }, []);
+
+  // Auto-resize when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      autoResizeTextarea(textareaRef.current);
+      autoResizeTextarea(noteTextareaRef.current);
+    }
+  }, [isEditing, autoResizeTextarea]);
 
   const handleSave = () => {
     if (editText.trim()) {
@@ -34,13 +52,42 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
     setIsEditing(false);
   };
 
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditText(e.target.value);
+    autoResizeTextarea(e.target);
+  };
+
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditNote(e.target.value);
+    autoResizeTextarea(e.target);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Save on Ctrl+Enter or Cmd+Enter
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    }
+    // Cancel on Escape
+    if (e.key === 'Escape') {
+      handleCancel();
+    }
+  };
+
   const createdAtLabel = new Date(todo.createdAt).toLocaleDateString('th-TH', {
     day: '2-digit',
     month: 'short',
   });
 
+  const fullDateLabel = new Date(todo.createdAt).toLocaleDateString('th-TH', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
     <div className="card todo-item">
+      {/* Checkbox */}
       <button
         onClick={() => onToggle(todo.id)}
         className={cn('todo-checkbox', todo.completed && 'checked')}
@@ -50,53 +97,73 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
         {todo.completed && <Check className="w-4 h-4" strokeWidth={3} />}
       </button>
       
+      {/* Content */}
       <div className="flex-1 min-w-0">
         {isEditing ? (
           <div className="edit-row">
-            <input
-              type="text"
+            {/* Main task textarea */}
+            <textarea
+              ref={textareaRef}
               value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSave();
-                if (e.key === 'Escape') handleCancel();
-              }}
-              className="input"
+              onChange={handleTextareaChange}
+              onKeyDown={handleKeyDown}
+              className="textarea"
               autoFocus
               placeholder="แก้ไขข้อความ..."
+              rows={1}
             />
+            
+            {/* Secondary row: Date, Priority, Note */}
             <div className="edit-row-secondary">
-              <input
-                type="date"
-                value={editDate}
-                onChange={(e) => setEditDate(e.target.value)}
-                className="input"
-                aria-label="เลือกวันที่"
-              />
+              <div className="flex items-center gap-2" style={{ flexShrink: 0 }}>
+                <Calendar className="w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="input"
+                  aria-label="เลือกวันที่"
+                  style={{ minWidth: 140 }}
+                />
+              </div>
+              
               <select
                 value={editPriority}
                 onChange={(e) => setEditPriority(e.target.value as 'low' | 'medium' | 'high')}
                 className="select"
                 aria-label="เลือกความสำคัญ"
+                style={{ flexShrink: 0 }}
               >
                 <option value="low">ต่ำ</option>
                 <option value="medium">ปานกลาง</option>
                 <option value="high">สูง</option>
               </select>
-              <input
-                type="text"
+              
+              <textarea
+                ref={noteTextareaRef}
                 value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
+                onChange={handleNoteChange}
+                onKeyDown={handleKeyDown}
                 placeholder="หมายเหตุ..."
-                className="input"
-                aria-label="หมายเหตุ"
+                className="textarea textarea-sm"
+                rows={1}
+                style={{ flex: 2, minWidth: 150 }}
               />
+            </div>
+            
+            {/* Actions */}
+            <div className="edit-actions">
               <button
                 onClick={handleSave}
                 className="icon-btn"
                 type="button"
-                title="บันทึก"
+                title="บันทึก (Ctrl+Enter)"
                 aria-label="บันทึก"
+                style={{ 
+                  background: 'rgba(16, 185, 129, 0.1)', 
+                  borderColor: 'var(--success-500)',
+                  color: 'var(--success-600)'
+                }}
               >
                 <Check className="w-4 h-4" />
               </button>
@@ -104,7 +171,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
                 onClick={handleCancel}
                 className="icon-btn"
                 type="button"
-                title="ยกเลิก"
+                title="ยกเลิก (Esc)"
                 aria-label="ยกเลิก"
               >
                 <X className="w-4 h-4" />
@@ -124,6 +191,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
               }
             }}
             aria-label="คลิกเพื่อแก้ไข"
+            title={fullDateLabel}
           >
             <span
               className={cn(
@@ -133,12 +201,21 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
             >
               {todo.text}
             </span>
+            
+            {/* Show note if exists */}
+            {todo.note && (
+              <div className="todo-note">
+                {todo.note}
+              </div>
+            )}
+            
             <span className="todo-date">{createdAtLabel}</span>
           </div>
         )}
       </div>
       
-      <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Right side: Badge & Actions */}
+      <div className="flex items-center gap-2 flex-shrink-0" style={{ marginTop: isEditing ? 0 : 2 }}>
         <span className={cn(
           'badge',
           todo.priority === 'high' && 'high',
@@ -152,32 +229,35 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
             {todo.priority === 'high' ? 'สูง' : todo.priority === 'medium' ? 'กลาง' : 'ต่ำ'}
           </span>
         </span>
-        <div className="mobile-actions">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsEditing(true);
-            }}
-            className="icon-btn"
-            type="button"
-            title="แก้ไข"
-            aria-label="แก้ไข"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(todo.id);
-            }}
-            className="icon-btn"
-            type="button"
-            title="ลบ"
-            aria-label="ลบ"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        
+        {!isEditing && (
+          <div className="mobile-actions">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+              }}
+              className="icon-btn"
+              type="button"
+              title="แก้ไข"
+              aria-label="แก้ไข"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(todo.id);
+              }}
+              className="icon-btn"
+              type="button"
+              title="ลบ"
+              aria-label="ลบ"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
