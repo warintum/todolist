@@ -164,6 +164,18 @@ const splitCSVLine = (line: string): string[] => {
   return result;
 };
 
+const getStoredUserName = (): string => {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+  try {
+    return localStorage.getItem('userName') || sessionStorage.getItem('userName') || '';
+  } catch (error) {
+    console.error('Failed to read stored user name:', error);
+    return '';
+  }
+};
+
 function App() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [filter, setFilter] = useState<TodoFilter>('all');
@@ -178,6 +190,7 @@ function App() {
     }
     return stored;
   });
+  const [userName, setUserName] = useState(() => getStoredUserName());
   const [hydrated, setHydrated] = useState(false);
 
   // Load todos on mount
@@ -220,6 +233,22 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
+
+  // Save user name
+  useEffect(() => {
+    try {
+      localStorage.setItem('userName', userName);
+      console.log('User name saved to localStorage');
+    } catch (error) {
+      console.error('Failed to save user name to localStorage:', error);
+      try {
+        sessionStorage.setItem('userName', userName);
+        console.log('User name saved to sessionStorage as fallback');
+      } catch (sessionError) {
+        console.error('Failed to save user name to sessionStorage:', sessionError);
+      }
+    }
+  }, [userName]);
 
   const addTodo = (text: string, priority: 'low' | 'medium' | 'high', note?: string) => {
     const newTodo: Todo = {
@@ -333,7 +362,7 @@ function App() {
   };
 
   const exportTodosAsExcelHandler = async (monthLabel?: string) => {
-    await exportTodosAsExcel(todos, monthLabel);
+    await exportTodosAsExcel(todos, monthLabel, userName);
   };
 
   return (
@@ -341,6 +370,7 @@ function App() {
       todos={todos}
       filter={filter}
       isDarkMode={isDarkMode}
+      userName={userName}
       onAddTodo={addTodo}
       onToggleTodo={toggleTodo}
       onDeleteTodo={deleteTodo}
@@ -350,6 +380,7 @@ function App() {
       onExportExcel={exportTodosAsExcelHandler}
       onFilterChange={setFilter}
       onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
+      onUserNameChange={setUserName}
     />
   );
 }

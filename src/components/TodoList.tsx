@@ -8,6 +8,7 @@ interface TodoListProps {
   todos: Todo[];
   filter: TodoFilter;
   isDarkMode: boolean;
+  userName: string;
   onAddTodo: (text: string, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
@@ -17,12 +18,14 @@ interface TodoListProps {
   onExportExcel: (monthLabel?: string) => Promise<void>;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
+  onUserNameChange: (name: string) => void;
 }
 
 const TodoList = ({
   todos,
   filter,
   isDarkMode,
+  userName,
   onAddTodo,
   onToggleTodo,
   onDeleteTodo,
@@ -32,6 +35,7 @@ const TodoList = ({
   onExportExcel,
   onFilterChange,
   onToggleDarkMode,
+  onUserNameChange,
 }: TodoListProps) => {
   const [newTodoText, setNewTodoText] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -112,6 +116,19 @@ const TodoList = ({
                 <Moon className="w-4 h-4" />
               )}
             </button>
+          </div>
+        </div>
+
+        <div className="card form-card">
+          <div className="form-row">
+            <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">ชื่อผู้ใช้งาน:</span>
+            <input
+              type="text"
+              value={userName}
+              onChange={(e) => onUserNameChange(e.target.value)}
+              placeholder="กรอกชื่อ - นามสกุล..."
+              className="input flex-1"
+            />
           </div>
         </div>
 

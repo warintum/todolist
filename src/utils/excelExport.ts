@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import type { Todo } from './todoTypes';
 
-export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => {
+export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string, userName?: string) => {
   if (todos.length === 0) {
     console.warn('No todos to export');
     return;
@@ -47,8 +47,9 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => 
   titleCell.font = { size: 12 };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // แถวที่ 3: ชื่อ - นามสกุล   วรินทร์ เข็มแดง (merge A3:B3)
-  const nameRow = worksheet.addRow(['ชื่อ - นามสกุล   วรินทร์ เข็มแดง', '', '', '']);
+  // แถวที่ 3: ชื่อ - นามสกุล (merge A3:B3)
+  const displayName = userName?.trim() || '';
+  const nameRow = worksheet.addRow([`ชื่อ - นามสกุล   ${displayName}`, '', '', '']);
   nameRow.height = 22;
   worksheet.mergeCells('A3:B3');
 
