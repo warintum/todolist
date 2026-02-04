@@ -4,6 +4,7 @@ export interface Todo {
   completed: boolean;
   createdAt: Date;
   priority: 'low' | 'medium' | 'high';
+  note?: string;
 }
 
 export type TodoFilter = 'all' | 'active' | 'completed';

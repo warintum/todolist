@@ -8,10 +8,10 @@ interface TodoListProps {
   todos: Todo[];
   filter: TodoFilter;
   isDarkMode: boolean;
-  onAddTodo: (text: string, priority: 'low' | 'medium' | 'high') => void;
+  onAddTodo: (text: string, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
-  onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high') => void;
+  onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onExportCSV: () => void;
   onImportCSV: (file: File) => void;
   onExportExcel: (monthLabel?: string) => Promise<void>;
@@ -35,6 +35,7 @@ const TodoList = ({
 }: TodoListProps) => {
   const [newTodoText, setNewTodoText] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState<'low' | 'medium' | 'high'>('medium');
+  const [newTodoNote, setNewTodoNote] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,9 +52,10 @@ const TodoList = ({
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (newTodoText.trim()) {
-      onAddTodo(newTodoText.trim(), newTodoPriority);
+      onAddTodo(newTodoText.trim(), newTodoPriority, newTodoNote.trim() || undefined);
       setNewTodoText('');
       setNewTodoPriority('medium');
+      setNewTodoNote('');
     }
   };
 
@@ -147,6 +149,13 @@ const TodoList = ({
                 <option value="medium">ปานกลาง</option>
                 <option value="high">สูง</option>
               </select>
+              <input
+                type="text"
+                value={newTodoNote}
+                onChange={(e) => setNewTodoNote(e.target.value)}
+                placeholder="หมายเหตุ..."
+                className="input"
+              />
               <button type="submit" className="primary-button">
                 <Plus className="w-4 h-4" />
                 เพิ่ม

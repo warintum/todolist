@@ -88,10 +88,8 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => 
       year: 'numeric',
     });
 
-    // ใช้ priority เป็น หมายเหตุ
-    const note = (todo as any).note ||
-      (todo.priority === 'high' ? 'สูง' :
-        todo.priority === 'medium' ? 'ปานกลาง' : 'ต่ำ');
+    // ใช้ note จาก field หรือเว้นว่าง
+    const note = todo.note || '';
 
     const dataRow = worksheet.addRow([
       index + 1,     // ลำดับ

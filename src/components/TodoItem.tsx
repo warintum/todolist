@@ -7,7 +7,7 @@ interface TodoItemProps {
   todo: Todo;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
-  onEdit: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high') => void;
+  onEdit: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => void;
 }
 
 const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
@@ -17,10 +17,11 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
     new Date(todo.createdAt).toISOString().split('T')[0]
   );
   const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high'>(todo.priority);
+  const [editNote, setEditNote] = useState(todo.note || '');
 
   const handleSave = () => {
     if (editText.trim()) {
-      onEdit(todo.id, editText.trim(), new Date(editDate), editPriority);
+      onEdit(todo.id, editText.trim(), new Date(editDate), editPriority, editNote.trim() || undefined);
       setIsEditing(false);
     }
   };
@@ -29,6 +30,7 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
     setEditText(todo.text);
     setEditDate(new Date(todo.createdAt).toISOString().split('T')[0]);
     setEditPriority(todo.priority);
+    setEditNote(todo.note || '');
     setIsEditing(false);
   };
 
@@ -81,6 +83,14 @@ const TodoItem = ({ todo, onToggle, onDelete, onEdit }: TodoItemProps) => {
                 <option value="medium">ปานกลาง</option>
                 <option value="high">สูง</option>
               </select>
+              <input
+                type="text"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                placeholder="หมายเหตุ..."
+                className="input"
+                aria-label="หมายเหตุ"
+              />
               <button
                 onClick={handleSave}
                 className="icon-btn"

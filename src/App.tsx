@@ -131,7 +131,7 @@ const loadTodosFromDB = async (): Promise<Todo[]> => {
   }
 };
 
-const csvHeaders = ['id', 'text', 'completed', 'createdAt', 'priority'] as const;
+const csvHeaders = ['id', 'text', 'completed', 'createdAt', 'priority', 'note'] as const;
 
 const escapeCSV = (value: string) => {
   const stringValue = value.replace(/"/g, '""');
@@ -221,13 +221,14 @@ function App() {
     }
   }, [isDarkMode]);
 
-  const addTodo = (text: string, priority: 'low' | 'medium' | 'high') => {
+  const addTodo = (text: string, priority: 'low' | 'medium' | 'high', note?: string) => {
     const newTodo: Todo = {
       id: Date.now().toString(),
       text,
       completed: false,
       createdAt: new Date(),
-      priority
+      priority,
+      note
     };
     setTodos((prev) => [newTodo, ...prev]);
   };
@@ -244,10 +245,10 @@ function App() {
     setTodos((prev) => prev.filter((todo) => todo.id !== id));
   };
 
-  const editTodo = (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high') => {
+  const editTodo = (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => {
     setTodos((prev) =>
       prev.map((todo) =>
-        todo.id === id ? { ...todo, text, createdAt, priority } : todo
+        todo.id === id ? { ...todo, text, createdAt, priority, note } : todo
       )
     );
   };
@@ -263,6 +264,7 @@ function App() {
       escapeCSV(String(todo.completed)),
       escapeCSV(todo.createdAt.toISOString()),
       escapeCSV(todo.priority),
+      escapeCSV(todo.note || ''),
     ]);
 
     const csv = [csvHeaders.join(','), ...rows.map((row) => row.join(','))].join('\n');
@@ -312,7 +314,7 @@ function App() {
 
       const parsedTodos: Todo[] = lines.map((line) => {
         const values = splitCSVLine(line);
-        const [id, textValue, completedValue, createdAtValue, priorityValue] = values;
+        const [id, textValue, completedValue, createdAtValue, priorityValue, noteValue] = values;
 
         return {
           id: id || Date.now().toString(),
@@ -320,6 +322,7 @@ function App() {
           completed: completedValue === 'true',
           createdAt: createdAtValue ? new Date(createdAtValue) : new Date(),
           priority: (priorityValue as Todo['priority']) || 'medium',
+          note: noteValue || undefined,
         };
       });
 
