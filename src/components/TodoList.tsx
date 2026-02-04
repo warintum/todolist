@@ -14,7 +14,7 @@ interface TodoListProps {
   onEditTodo: (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high') => void;
   onExportCSV: () => void;
   onImportCSV: (file: File) => void;
-  onExportExcel: (monthLabel?: string) => void;
+  onExportExcel: (monthLabel?: string) => Promise<void>;
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
 }
@@ -95,11 +95,11 @@ const TodoList = ({
             <button type="button" className="icon-button" onClick={onExportCSV} title="ส่งออก CSV">
               <Upload className="w-4 h-4" />
             </button>
-            <button type="button" className="icon-button" onClick={() => {
+            <button type="button" className="icon-button" onClick={async () => {
               const monthLabel = selectedMonth === 'all' 
                 ? undefined 
                 : monthOptions.find(o => o.key === selectedMonth)?.label;
-              onExportExcel(monthLabel);
+              await onExportExcel(monthLabel);
             }} title="ส่งออก Excel">
               <FileSpreadsheet className="w-4 h-4" />
             </button>

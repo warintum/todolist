@@ -329,8 +329,8 @@ function App() {
     }
   };
 
-  const exportTodosAsExcelHandler = (monthLabel?: string) => {
-    exportTodosAsExcel(todos, monthLabel);
+  const exportTodosAsExcelHandler = async (monthLabel?: string) => {
+    await exportTodosAsExcel(todos, monthLabel);
   };
 
   return (
