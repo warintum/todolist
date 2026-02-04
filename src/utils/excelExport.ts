@@ -28,28 +28,33 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => 
   const companyRow = worksheet.addRow(['บริษัท โรงงานผลิตภัณฑ์อาหารไทย จำกัด']);
   companyRow.height = 25;
   worksheet.mergeCells('A1:D1');
-  
+
   // จัดสไตล์หัวเรื่องบริษัท
   const companyCell = worksheet.getCell('A1');
   companyCell.font = { bold: true, size: 14 };
   companyCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-  // แถวที่ 2: เว้นว่าง
-  worksheet.addRow([]);
-  worksheet.getRow(2).height = 10;
-
-  // แถวที่ 3: หัวเรื่องรายงาน (merge A3:D3)
+  // แถวที่ 2: หัวเรื่องรายงาน (merge A2:D2)
   const reportTitle = monthLabel
     ? `รายงานการทำงานประจำเดือน : ${monthLabel}`
     : 'รายงานการทำงานประจำเดือน';
   const titleRow = worksheet.addRow([reportTitle]);
   titleRow.height = 25;
-  worksheet.mergeCells('A3:D3');
-  
+  worksheet.mergeCells('A2:D2');
+
   // จัดสไตล์หัวรายงาน
-  const titleCell = worksheet.getCell('A3');
+  const titleCell = worksheet.getCell('A2');
   titleCell.font = { size: 12 };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+  // แถวที่ 3: ชื่อ - นามสกุล   วรินทร์ เข็มแดง (merge A3:B3)
+  const nameRow = worksheet.addRow(['ชื่อ - นามสกุล   วรินทร์ เข็มแดง', '', '', '']);
+  nameRow.height = 22;
+  worksheet.mergeCells('A3:B3');
+
+  // จัดสไตล์ (A3)
+  const nameCell = worksheet.getCell('A3');
+  nameCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
   // แถวที่ 4: เว้นว่าง
   worksheet.addRow([]);
@@ -58,13 +63,13 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => 
   // แถวที่ 5: หัวตาราง
   const headerRow = worksheet.addRow(['ลำดับ', 'รายละเอียด', 'วันที่', 'หมายเหตุ']);
   headerRow.height = 25;
-  
+
   // จัดสไตล์หัวตาราง
   headerRow.eachCell((cell, colNumber) => {
     cell.font = { bold: true };
-    cell.alignment = { 
-      horizontal: colNumber === 2 ? 'left' : 'center', 
-      vertical: 'middle' 
+    cell.alignment = {
+      horizontal: colNumber === 2 ? 'left' : 'center',
+      vertical: 'middle'
     };
     cell.border = {
       top: { style: 'medium' },
@@ -104,7 +109,7 @@ export const exportTodosAsExcel = async (todos: Todo[], monthLabel?: string) => 
         left: { style: 'thin' },
         right: { style: 'thin' },
       };
-      
+
       // ลำดับ (คอลัมน์ 1): กึ่งกลาง
       // รายละเอียด (คอลัมน์ 2): ชิดซ้าย
       // วันที่ (คอลัมน์ 3): กึ่งกลาง
