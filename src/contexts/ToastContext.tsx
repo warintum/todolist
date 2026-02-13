@@ -112,13 +112,11 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
     
     setToasts((prev) => [...prev, newToast]);
 
-    // Auto dismiss for non-undo toasts
-    if (type !== 'undo') {
-      const timer = setTimeout(() => {
-        hideToast(id);
-      }, duration);
-      timersRef.current.set(id, timer);
-    }
+    // Auto dismiss after duration (including undo toasts)
+    const timer = setTimeout(() => {
+      hideToast(id);
+    }, duration);
+    timersRef.current.set(id, timer);
   }, [hideToast]);
 
   return (

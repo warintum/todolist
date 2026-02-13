@@ -1,17 +1,57 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Todo, TodoFilter } from './utils/todoTypes';
 import TodoList from './components/TodoList';
+import { DataMergeModal } from './components/DataMergeModal';
 import { exportTodosAsExcel } from './utils/excelExport';
 import { useToast } from './contexts/ToastContext';
+import { useAuth } from './contexts/AuthContext';
 import { CommandPalette } from './components/CommandPalette';
 import { useConfetti } from './hooks/useConfetti';
+import { 
+  saveTodosToCloud, 
+  loadTodosFromCloud, 
+  saveTodoToCloud, 
+  deleteTodoFromCloud,
+  mergeTodos 
+} from './firebase/todoService';
 
-// IndexedDB implementation
+// IndexedDB implementation for local storage (fallback/offline support)
 const DB_NAME = 'TodoListDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Increment version to add pendingOps store
 const STORE_NAME = 'todos';
 
 let db: IDBDatabase | null = null;
+
+// Queue for offline operations
+interface PendingOperation {
+  type: 'add' | 'update' | 'delete';
+  todoId: string;
+  todo?: Todo;
+}
+
+// Helper to get last synced user ID
+const getLastSyncedUserId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem('lastSyncedUserId');
+  } catch {
+    return null;
+  }
+};
+
+// Helper to set last synced user ID
+const setLastSyncedUserId = (userId: string | null) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (userId) {
+      localStorage.setItem('lastSyncedUserId', userId);
+    } else {
+      localStorage.removeItem('lastSyncedUserId');
+    }
+  } catch (error) {
+    console.error('Failed to set last synced user:', error);
+  }
+};
 
 const getStoredDarkMode = (): boolean => {
   if (typeof window === 'undefined') {
@@ -62,8 +102,16 @@ const initDB = (): Promise<IDBDatabase> => {
     
     request.onupgradeneeded = (event) => {
       const database = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = event.oldVersion;
+      
+      // Create todos store (version 1)
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      
+      // Create pending operations store (version 2)
+      if (oldVersion < 2 && !database.objectStoreNames.contains('pendingOps')) {
+        database.createObjectStore('pendingOps', { keyPath: 'todoId' });
       }
     };
   });
@@ -78,10 +126,8 @@ const saveTodosToDB = async (todos: Todo[]) => {
     const transaction = db!.transaction([STORE_NAME], 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
 
-    // Clear existing todos
     await promisifyRequest(store.clear());
 
-    // Upsert all todos
     for (const todo of todos) {
       await promisifyRequest(store.put(todo));
     }
@@ -89,7 +135,6 @@ const saveTodosToDB = async (todos: Todo[]) => {
     await waitForTransaction(transaction);
   } catch (error) {
     console.error('Failed to save to IndexedDB:', error);
-    // Fallback to sessionStorage
     try {
       sessionStorage.setItem('todos', JSON.stringify(todos));
     } catch (sessionError) {
@@ -116,7 +161,6 @@ const loadTodosFromDB = async (): Promise<Todo[]> => {
   } catch (error) {
     console.error('Failed to load from IndexedDB:', error);
     
-    // Fallback to sessionStorage
     try {
       const saved = sessionStorage.getItem('todos');
       if (saved) {
@@ -131,6 +175,66 @@ const loadTodosFromDB = async (): Promise<Todo[]> => {
     }
     
     return [];
+  }
+};
+
+// Save pending operation for offline sync
+const savePendingOperation = async (operation: PendingOperation) => {
+  try {
+    if (!db) {
+      db = await initDB();
+    }
+    // Check if store exists
+    if (!db!.objectStoreNames.contains('pendingOps')) {
+      console.warn('pendingOps store not found, skipping offline queue');
+      return;
+    }
+    const transaction = db!.transaction(['pendingOps'], 'readwrite');
+    const store = transaction.objectStore('pendingOps');
+    await promisifyRequest(store.put(operation));
+    await waitForTransaction(transaction);
+  } catch (error) {
+    console.error('Failed to save pending operation:', error);
+  }
+};
+
+// Load pending operations
+const loadPendingOperations = async (): Promise<PendingOperation[]> => {
+  try {
+    if (!db) {
+      db = await initDB();
+    }
+    // Check if store exists
+    if (!db!.objectStoreNames.contains('pendingOps')) {
+      return [];
+    }
+    const transaction = db!.transaction(['pendingOps'], 'readonly');
+    const store = transaction.objectStore('pendingOps');
+    const ops = await promisifyRequest(store.getAll());
+    await waitForTransaction(transaction);
+    return (ops as PendingOperation[]) || [];
+  } catch (error) {
+    console.error('Failed to load pending operations:', error);
+    return [];
+  }
+};
+
+// Clear pending operation
+const clearPendingOperation = async (todoId: string) => {
+  try {
+    if (!db) {
+      db = await initDB();
+    }
+    // Check if store exists
+    if (!db!.objectStoreNames.contains('pendingOps')) {
+      return;
+    }
+    const transaction = db!.transaction(['pendingOps'], 'readwrite');
+    const store = transaction.objectStore('pendingOps');
+    await promisifyRequest(store.delete(todoId));
+    await waitForTransaction(transaction);
+  } catch (error) {
+    console.error('Failed to clear pending operation:', error);
   }
 };
 
@@ -196,29 +300,162 @@ function App() {
   const [userName, setUserName] = useState(() => getStoredUserName());
   const [hydrated, setHydrated] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { showToast } = useToast();
+  const { user, loading: authLoading, signInWithGoogle, logout, isAuthenticated } = useAuth();
   const { triggerSuccess, triggerCelebration } = useConfetti();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Store deleted todo for undo
   const deletedTodoRef = useRef<{ todo: Todo; index: number } | null>(null);
+  
+  // Data merge modal state
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [pendingCloudTodos, setPendingCloudTodos] = useState<Todo[]>([]);
+  const [pendingLocalTodos, setPendingLocalTodos] = useState<Todo[]>([]);
+  const hasShownMergeModal = useRef(false);
 
-  // Load todos on mount
+  // Process pending operations when coming back online
+  const processPendingOperations = useCallback(async () => {
+    if (!user) return;
+    
+    const pendingOps = await loadPendingOperations();
+    if (pendingOps.length === 0) return;
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const op of pendingOps) {
+      try {
+        if (op.type === 'delete') {
+          await deleteTodoFromCloud(user.uid, op.todoId);
+        } else if (op.type === 'add' || op.type === 'update') {
+          if (op.todo) {
+            await saveTodoToCloud(user.uid, op.todo);
+          }
+        }
+        await clearPendingOperation(op.todoId);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to process pending ${op.type} operation:`, error);
+        failCount++;
+      }
+    }
+    
+    if (successCount > 0) {
+      showToast(`🔄 ซิงค์ข้อมูลค้างไว้ ${successCount} รายการสำเร็จ`, 'success', 3000);
+    }
+    if (failCount > 0) {
+      showToast(`⚠️ ซิงค์ล้มเหลว ${failCount} รายการ จะลองใหม่ภายหลัง`, 'error', 3000);
+    }
+  }, [user, showToast]);
+
+  // Load todos on mount - try cloud first if authenticated, fallback to local
   useEffect(() => {
     const loadTodos = async () => {
-      const loadedTodos = await loadTodosFromDB();
-      setTodos(loadedTodos);
+      const localTodos = await loadTodosFromDB();
+      
+      if (user) {
+        // User is logged in, try to sync with cloud
+        setIsSyncing(true);
+        try {
+          const cloudTodos = await loadTodosFromCloud(user.uid);
+          
+          // Check if we need to show merge modal
+          // Show when: 
+          // 1. Has local data
+          // 2. AND (never synced with this user OR local has items not in cloud)
+          const lastSyncedUser = getLastSyncedUserId();
+          const isDifferentUser = lastSyncedUser !== user.uid;
+          
+          // Check if all local items exist in cloud (by id)
+          const cloudTodoIds = new Set(cloudTodos.map(t => t.id));
+          const localOnlyTodos = localTodos.filter(t => !cloudTodoIds.has(t.id));
+          const hasUnsyncedLocalData = localOnlyTodos.length > 0;
+          
+          if (localTodos.length > 0 && !hasShownMergeModal.current && (isDifferentUser || hasUnsyncedLocalData)) {
+            // Save pending data and show modal
+            setPendingLocalTodos(localTodos);
+            setPendingCloudTodos(cloudTodos);
+            setShowMergeModal(true);
+            hasShownMergeModal.current = true;
+            setIsSyncing(false);
+            setHydrated(true);
+            return;
+          }
+          
+          if (cloudTodos.length > 0 && localTodos.length > 0) {
+            // Merge local and cloud
+            const merged = mergeTodos(localTodos, cloudTodos);
+            setTodos(merged);
+            // Sync merged data back to cloud
+            await saveTodosToCloud(user.uid, merged);
+            // Mark as synced with this user
+            setLastSyncedUserId(user.uid);
+            showToast('🔄 ซิงค์ข้อมูลสำเร็จ', 'success', 2000);
+          } else if (cloudTodos.length > 0) {
+            setTodos(cloudTodos);
+            // Save cloud data to local
+            await saveTodosToDB(cloudTodos);
+            // Mark as synced with this user
+            setLastSyncedUserId(user.uid);
+            showToast('☁️ โหลดข้อมูลจาก Cloud สำเร็จ', 'success', 2000);
+          } else if (localTodos.length > 0) {
+            setTodos(localTodos);
+            // Upload local data to cloud
+            await saveTodosToCloud(user.uid, localTodos);
+            // Mark as synced with this user
+            setLastSyncedUserId(user.uid);
+            showToast('⬆️ อัพโหลดข้อมูลไป Cloud สำเร็จ', 'success', 2000);
+          } else {
+            setTodos([]);
+            // Mark as synced (empty data)
+            setLastSyncedUserId(user.uid);
+          }
+          
+          // Process any pending operations
+          await processPendingOperations();
+        } catch (error) {
+          console.error('Failed to sync with cloud:', error);
+          setTodos(localTodos);
+          showToast('⚠️ ซิงค์ข้อมูลล้มเหลว ใช้ข้อมูลในเครื่อง', 'error', 3000);
+        } finally {
+          setIsSyncing(false);
+        }
+      } else {
+        // Not logged in, use local data
+        setTodos(localTodos);
+      }
+      
       setHydrated(true);
     };
     
-    loadTodos();
-  }, []);
+    if (!authLoading) {
+      loadTodos();
+    }
+  }, [user, authLoading, processPendingOperations]);
 
-  // Save todos whenever they change
+  // Save todos to local whenever they change
   useEffect(() => {
     if (!hydrated) return;
     saveTodosToDB(todos);
   }, [hydrated, todos]);
+
+  // Sync to cloud when todos change (if authenticated)
+  useEffect(() => {
+    if (!hydrated || !user || isSyncing) return;
+    
+    const syncToCloud = async () => {
+      try {
+        await saveTodosToCloud(user.uid, todos);
+      } catch (error) {
+        console.error('Failed to sync to cloud:', error);
+      }
+    };
+    
+    // Debounce cloud sync
+    const timeoutId = setTimeout(syncToCloud, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [hydrated, todos, user, isSyncing]);
 
   // Save dark mode
   useEffect(() => {
@@ -254,6 +491,13 @@ function App() {
     }
   }, [userName]);
 
+  // Update userName when Google user changes
+  useEffect(() => {
+    if (user?.displayName && !userName) {
+      setUserName(user.displayName);
+    }
+  }, [user, userName]);
+
   // Check for 100% completion
   useEffect(() => {
     if (todos.length > 0 && todos.every(t => t.completed)) {
@@ -265,7 +509,6 @@ function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Command Palette: Ctrl/Cmd + K
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
         setIsCommandPaletteOpen(true);
@@ -276,7 +519,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const addTodo = (text: string, priority: 'low' | 'medium' | 'high', note?: string) => {
+  const addTodo = async (text: string, priority: 'low' | 'medium' | 'high', note?: string) => {
     const newTodo: Todo = {
       id: Date.now().toString(),
       text,
@@ -285,11 +528,24 @@ function App() {
       priority,
       note
     };
+    
     setTodos((prev) => [newTodo, ...prev]);
+    
+    if (user) {
+      try {
+        await saveTodoToCloud(user.uid, newTodo);
+      } catch (error) {
+        console.error('Failed to save todo to cloud:', error);
+        // Queue for retry
+        await savePendingOperation({ type: 'add', todoId: newTodo.id, todo: newTodo });
+        showToast('⚠️ บันทึกในเครื่องแล้ว จะซิงค์เมื่อออนไลน์', 'info', 3000);
+      }
+    }
+    
     showToast('✅ เพิ่มรายการสำเร็จ', 'success', 2000);
   };
 
-  const toggleTodo = useCallback((id: string) => {
+  const toggleTodo = useCallback(async (id: string) => {
     setTodos((prev) => {
       const todo = prev.find(t => t.id === id);
       const newCompleted = !todo?.completed;
@@ -299,41 +555,283 @@ function App() {
         showToast('🎊 เสร็จงานสำคัญแล้ว!', 'success', 3000);
       }
       
-      return prev.map((todo) =>
+      const updatedTodos = prev.map((todo) =>
         todo.id === id ? { ...todo, completed: !todo.completed } : todo
       );
+      
+      // Sync individual todo to cloud
+      if (user) {
+        const updatedTodo = updatedTodos.find(t => t.id === id);
+        if (updatedTodo) {
+          saveTodoToCloud(user.uid, updatedTodo).catch(async error => {
+            console.error('Failed to sync todo to cloud:', error);
+            await savePendingOperation({ type: 'update', todoId: id, todo: updatedTodo });
+          });
+        }
+      }
+      
+      return updatedTodos;
     });
-  }, [showToast, triggerSuccess]);
+  }, [showToast, triggerSuccess, user]);
 
-  const deleteTodo = useCallback((id: string) => {
+  const deleteTodo = useCallback(async (id: string) => {
+    // Find todo before deleting
+    const todoToDelete = todos.find(t => t.id === id);
+    const index = todos.findIndex(t => t.id === id);
+    
+    // Store in ref before state update
+    const deletedTodoData = { todo: todoToDelete!, index };
+    deletedTodoRef.current = deletedTodoData;
+    
     setTodos((prev) => {
-      const index = prev.findIndex(t => t.id === id);
-      const todo = prev[index];
-      deletedTodoRef.current = { todo, index };
       return prev.filter((todo) => todo.id !== id);
     });
     
-    showToast('🗑️ ลบรายการแล้ว', 'undo', 5000, () => {
-      // Undo action
-      if (deletedTodoRef.current) {
+    let cloudDeleteSuccess = false;
+    
+    if (user) {
+      try {
+        await deleteTodoFromCloud(user.uid, id);
+        cloudDeleteSuccess = true;
+      } catch (error) {
+        console.error('Failed to delete todo from cloud:', error);
+        // Queue for retry
+        await savePendingOperation({ type: 'delete', todoId: id });
+      }
+    }
+    
+    showToast(
+      user 
+        ? cloudDeleteSuccess 
+          ? '🗑️ ลบรายการแล้ว (ซิงค์สำเร็จ)' 
+          : '🗑️ ลบรายการแล้ว (จะซิงค์เมื่อออนไลน์)'
+        : '🗑️ ลบรายการแล้ว',
+      'undo',
+      5000,
+      async () => {
+        // Undo action - use closure to capture the deleted data
+        const todoToRestore = deletedTodoData.todo;
+        const restoreIndex = deletedTodoData.index;
+        
         setTodos((prev) => {
-          const { todo, index } = deletedTodoRef.current!;
           const newTodos = [...prev];
-          newTodos.splice(index, 0, todo);
+          newTodos.splice(restoreIndex, 0, todoToRestore);
           return newTodos;
         });
-        showToast('↩️ กู้คืนรายการแล้ว', 'info', 2000);
+        
+        if (user) {
+          try {
+            await saveTodoToCloud(user.uid, todoToRestore);
+            showToast('↩️ กู้คืนรายการแล้ว (ซิงค์สำเร็จ)', 'info', 3000);
+          } catch (error) {
+            console.error('Failed to restore todo to cloud:', error);
+            await savePendingOperation({ type: 'add', todoId: todoToRestore.id, todo: todoToRestore });
+            showToast('↩️ กู้คืนรายการแล้ว (จะซิงค์เมื่อออนไลน์)', 'info', 3000);
+          }
+        } else {
+          showToast('↩️ กู้คืนรายการแล้ว', 'info', 3000);
+        }
+        
+        // Clear the ref after undo
+        deletedTodoRef.current = null;
       }
-    });
-  }, [showToast]);
+    );
+  }, [showToast, user, todos]);
 
-  const editTodo = (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => {
+  const editTodo = async (id: string, text: string, createdAt: Date, priority: 'low' | 'medium' | 'high', note?: string) => {
+    const originalTodo = todos.find(t => t.id === id);
+    
     setTodos((prev) =>
       prev.map((todo) =>
         todo.id === id ? { ...todo, text, createdAt, priority, note } : todo
       )
     );
+    
+    if (user) {
+      const updatedTodo = { ...originalTodo!, text, createdAt, priority, note };
+      try {
+        await saveTodoToCloud(user.uid, updatedTodo);
+      } catch (error) {
+        console.error('Failed to update todo in cloud:', error);
+        await savePendingOperation({ type: 'update', todoId: id, todo: updatedTodo });
+      }
+    }
+    
     showToast('✏️ แก้ไขรายการสำเร็จ', 'success', 2000);
+  };
+
+  // Handle merge decision - Merge local and cloud data
+  const handleMergeData = async () => {
+    setShowMergeModal(false);
+    setIsSyncing(true);
+    
+    try {
+      const merged = mergeTodos(pendingLocalTodos, pendingCloudTodos);
+      setTodos(merged);
+      await saveTodosToDB(merged);
+      
+      if (user) {
+        await saveTodosToCloud(user.uid, merged);
+        await processPendingOperations();
+        // Mark as synced with this user
+        setLastSyncedUserId(user.uid);
+      }
+      
+      showToast('🔄 รวมข้อมูลสำเร็จ', 'success', 3000);
+    } catch (error) {
+      console.error('Failed to merge data:', error);
+      showToast('❌ รวมข้อมูลล้มเหลว', 'error', 3000);
+      // Fallback to local data
+      setTodos(pendingLocalTodos);
+    } finally {
+      setIsSyncing(false);
+      setPendingLocalTodos([]);
+      setPendingCloudTodos([]);
+    }
+  };
+
+  // Handle replace decision - Delete local and use cloud only
+  const handleReplaceData = async () => {
+    setShowMergeModal(false);
+    setIsSyncing(true);
+    
+    try {
+      // Clear local data first
+      if (!db) {
+        db = await initDB();
+      }
+      
+      const storeNames = Array.from(db!.objectStoreNames);
+      const storesToClear = [];
+      if (storeNames.includes(STORE_NAME)) {
+        storesToClear.push(STORE_NAME);
+      }
+      if (storeNames.includes('pendingOps')) {
+        storesToClear.push('pendingOps');
+      }
+      
+      if (storesToClear.length > 0) {
+        const transaction = db!.transaction(storesToClear, 'readwrite');
+        for (const storeName of storesToClear) {
+          const store = transaction.objectStore(storeName);
+          await promisifyRequest(store.clear());
+        }
+        await waitForTransaction(transaction);
+      }
+      
+      // Use cloud data
+      setTodos(pendingCloudTodos);
+      await saveTodosToDB(pendingCloudTodos);
+      
+      // Mark as synced with this user
+      if (user) {
+        setLastSyncedUserId(user.uid);
+      }
+      
+      if (pendingCloudTodos.length > 0) {
+        showToast('☁️ ใช้ข้อมูลจาก Cloud แทนข้อมูลเดิม', 'info', 3000);
+      } else {
+        showToast('🗑️ ลบข้อมูลเดิมแล้ว (ไม่มีข้อมูลบน Cloud)', 'info', 3000);
+      }
+    } catch (error) {
+      console.error('Failed to replace data:', error);
+      showToast('❌ ไม่สามารถลบข้อมูลเดิมได้', 'error', 3000);
+      // Fallback to local data
+      setTodos(pendingLocalTodos);
+    } finally {
+      setIsSyncing(false);
+      setPendingLocalTodos([]);
+      setPendingCloudTodos([]);
+    }
+  };
+
+  // Handle cancel - Keep local data only
+  const handleCancelMerge = () => {
+    setShowMergeModal(false);
+    setTodos(pendingLocalTodos);
+    setPendingLocalTodos([]);
+    setPendingCloudTodos([]);
+    showToast('⚠️ ใช้ข้อมูลในเครื่องต่อ (ยังไม่ซิงค์)', 'info', 3000);
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      showToast('👋 เข้าสู่ระบบสำเร็จ', 'success', 3000);
+    } catch (error) {
+      console.error('Sign in error:', error);
+      showToast('❌ เข้าสู่ระบบล้มเหลว', 'error', 3000);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      hasShownMergeModal.current = false; // Reset for next login
+      // Note: We keep lastSyncedUserId so we know which user was last synced
+      showToast('👋 ออกจากระบบสำเร็จ', 'info', 3000);
+    } catch (error) {
+      console.error('Logout error:', error);
+      showToast('❌ ออกจากระบบล้มเหลว', 'error', 3000);
+    }
+  };
+
+  // Clear all local data (IndexedDB + localStorage todos)
+  const clearAllLocalData = async () => {
+    try {
+      // Clear IndexedDB - handle case where stores might not exist
+      if (!db) {
+        db = await initDB();
+      }
+      
+      // Check which stores exist
+      const storeNames = Array.from(db!.objectStoreNames);
+      
+      // Only clear stores that exist
+      const storesToClear = [];
+      if (storeNames.includes(STORE_NAME)) {
+        storesToClear.push(STORE_NAME);
+      }
+      if (storeNames.includes('pendingOps')) {
+        storesToClear.push('pendingOps');
+      }
+      
+      if (storesToClear.length > 0) {
+        const transaction = db!.transaction(storesToClear, 'readwrite');
+        
+        for (const storeName of storesToClear) {
+          const store = transaction.objectStore(storeName);
+          await promisifyRequest(store.clear());
+        }
+        
+        await waitForTransaction(transaction);
+      }
+      
+      // Clear localStorage todos (keep darkMode and userName)
+      localStorage.removeItem('todos');
+      
+      // Clear state
+      setTodos([]);
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to clear local data:', error);
+      // Try to clear state at least
+      setTodos([]);
+      return false;
+    }
+  };
+
+  const handleLogoutWithClearData = async () => {
+    const cleared = await clearAllLocalData();
+    if (cleared) {
+      setLastSyncedUserId(null); // Clear last synced user since data is gone
+      await logout();
+      showToast('🗑️ ลบข้อมูลและออกจากระบบสำเร็จ', 'info', 3000);
+    } else {
+      showToast('⚠️ ลบข้อมูลไม่สำเร็จ แต่ออกจากระบบแล้ว', 'error', 3000);
+      await logout();
+    }
   };
 
   const exportTodosAsCSV = () => {
@@ -380,7 +878,7 @@ function App() {
       });
 
     readFile(file)
-      .then((text) => {
+      .then(async (text) => {
         const lines = text
           .split(/\r?\n/)
           .map((line) => line.trim())
@@ -392,7 +890,6 @@ function App() {
         }
 
         const headerLine = lines.shift()!;
-        // Skip header validation for now
         splitCSVLine(headerLine);
 
         const parsedTodos: Todo[] = lines.map((line) => {
@@ -410,6 +907,19 @@ function App() {
         });
 
         setTodos(parsedTodos);
+        
+        if (user) {
+          try {
+            await saveTodosToCloud(user.uid, parsedTodos);
+          } catch (error) {
+            console.error('Failed to sync imported todos:', error);
+            // Queue all for retry
+            for (const todo of parsedTodos) {
+              await savePendingOperation({ type: 'add', todoId: todo.id, todo });
+            }
+          }
+        }
+        
         showToast('📥 นำเข้าข้อมูลสำเร็จ', 'success', 3000);
       })
       .catch((error) => {
@@ -420,7 +930,6 @@ function App() {
 
   const exportTodosAsExcelHandler = async (todosToExport: Todo[], monthLabel?: string, userNameForExport?: string) => {
     try {
-      // Use the provided userNameForExport if available, otherwise fall back to state
       const nameToUse = userNameForExport !== undefined ? userNameForExport : userName;
       await exportTodosAsExcel(todosToExport, monthLabel, nameToUse);
       showToast('📊 ส่งออก Excel สำเร็จ', 'success', 3000);
@@ -434,8 +943,29 @@ function App() {
     fileInputRef.current?.click();
   };
 
+  if (authLoading) {
+    return (
+      <div className="app-shell">
+        <div className="app-panel" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+          <div className="loading-spinner" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Data Merge Modal */}
+      <DataMergeModal
+        isOpen={showMergeModal}
+        localCount={pendingLocalTodos.length}
+        cloudCount={pendingCloudTodos.length}
+        user={user}
+        onMerge={handleMergeData}
+        onReplace={handleReplaceData}
+        onCancel={handleCancelMerge}
+      />
+      
       <input
         ref={fileInputRef}
         type="file"
@@ -455,6 +985,9 @@ function App() {
         filter={filter}
         isDarkMode={isDarkMode}
         userName={userName}
+        isAuthenticated={isAuthenticated}
+        user={user}
+        isSyncing={isSyncing}
         onAddTodo={addTodo}
         onToggleTodo={toggleTodo}
         onDeleteTodo={deleteTodo}
@@ -465,6 +998,10 @@ function App() {
         onFilterChange={setFilter}
         onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         onUserNameChange={setUserName}
+        onSignIn={handleSignIn}
+        onLogout={handleLogout}
+        onLogoutWithClearData={handleLogoutWithClearData}
+        hasLocalData={todos.length > 0}
       />
       
       <CommandPalette
@@ -481,7 +1018,6 @@ function App() {
         onImportCSV={handleImportClick}
         onExportExcel={exportTodosAsExcelHandler}
         onAddTodo={() => {
-          // Focus on the add todo textarea
           const textarea = document.querySelector('.form-card textarea') as HTMLTextAreaElement;
           if (textarea) {
             textarea.focus();

@@ -1,14 +1,18 @@
 import { useState, useRef, type FormEvent, useCallback } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet, X, User } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet, X, User, LogIn, LogOut, Cloud, CloudOff, Loader2, Trash2 } from 'lucide-react';
 import TodoItem from './TodoItem';
+import type { User as FirebaseUser } from 'firebase/auth';
 
 interface TodoListProps {
   todos: Todo[];
   filter: TodoFilter;
   isDarkMode: boolean;
   userName?: string;
+  isAuthenticated: boolean;
+  user: FirebaseUser | null;
+  isSyncing: boolean;
   onAddTodo: (text: string, priority: 'low' | 'medium' | 'high', note?: string) => void;
   onToggleTodo: (id: string) => void;
   onDeleteTodo: (id: string) => void;
@@ -19,6 +23,10 @@ interface TodoListProps {
   onFilterChange: (filter: TodoFilter) => void;
   onToggleDarkMode: () => void;
   onUserNameChange: (name: string) => void;
+  onSignIn: () => void;
+  onLogout: () => void;
+  onLogoutWithClearData?: () => void;
+  hasLocalData?: boolean;
 }
 
 const TodoList = ({
@@ -26,6 +34,9 @@ const TodoList = ({
   filter,
   isDarkMode,
   userName,
+  isAuthenticated,
+  user,
+  isSyncing,
   onAddTodo,
   onToggleTodo,
   onDeleteTodo,
@@ -36,6 +47,10 @@ const TodoList = ({
   onFilterChange,
   onToggleDarkMode,
   onUserNameChange,
+  onSignIn,
+  onLogout,
+  onLogoutWithClearData,
+  hasLocalData = false,
 }: TodoListProps) => {
   const [newTodoText, setNewTodoText] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -43,8 +58,10 @@ const TodoList = ({
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [isUserNameModalOpen, setIsUserNameModalOpen] = useState(false);
   const [tempUserName, setTempUserName] = useState(userName || '');
+  const [showAuthMenu, setShowAuthMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const authMenuRef = useRef<HTMLDivElement>(null);
 
   // Auto-resize textarea
   const autoResizeTextarea = useCallback((element: HTMLTextAreaElement | null) => {
@@ -70,7 +87,6 @@ const TodoList = ({
       setNewTodoText('');
       setNewTodoPriority('medium');
       setNewTodoNote('');
-      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
@@ -83,7 +99,6 @@ const TodoList = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Submit on Ctrl+Enter or Cmd+Enter
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       if (newTodoText.trim()) {
@@ -105,13 +120,99 @@ const TodoList = ({
   const activeTodoCount = todos.filter(todo => !todo.completed).length;
   const completedTodoCount = todos.filter(todo => todo.completed).length;
 
+  // Close auth menu when clicking outside
+  const handleAuthMenuClick = (e: React.MouseEvent) => {
+    if (authMenuRef.current && !authMenuRef.current.contains(e.target as Node)) {
+      setShowAuthMenu(false);
+    }
+  };
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" onClick={showAuthMenu ? handleAuthMenuClick : undefined}>
       <div className="app-panel">
         {/* Header */}
         <div className="header-row">
           <h1 className="title">To Do List</h1>
           <div className="header-actions">
+            {/* Auth Status & Menu */}
+            <div className="auth-container" ref={authMenuRef}>
+              <button 
+                type="button" 
+                className={cn('auth-button', isAuthenticated && 'authenticated')}
+                onClick={() => setShowAuthMenu(!showAuthMenu)}
+                title={isAuthenticated ? `เข้าสู่ระบบ: ${user?.email}` : 'เข้าสู่ระบบด้วย Google'}
+              >
+                {isSyncing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : isAuthenticated ? (
+                  <Cloud className="w-4 h-4" />
+                ) : (
+                  <CloudOff className="w-4 h-4" />
+                )}
+                <span className="auth-text">
+                  {isSyncing ? 'กำลังซิงค์...' : isAuthenticated ? 'ซิงค์แล้ว' : 'ไม่ซิงค์'}
+                </span>
+              </button>
+
+              {showAuthMenu && (
+                <div className="auth-menu">
+                  {isAuthenticated ? (
+                    <>
+                      <div className="auth-user-info">
+                        {user?.photoURL ? (
+                          <img src={user.photoURL} alt="Profile" className="auth-avatar" />
+                        ) : (
+                          <div className="auth-avatar-placeholder">
+                            <User className="w-5 h-5" />
+                          </div>
+                        )}
+                        <div className="auth-user-details">
+                          <div className="auth-user-name">{user?.displayName || 'ผู้ใช้'}</div>
+                          <div className="auth-user-email">{user?.email}</div>
+                        </div>
+                      </div>
+                      <div className="auth-divider" />
+                      <button 
+                        className="auth-menu-item logout"
+                        onClick={() => {
+                          onLogout();
+                          setShowAuthMenu(false);
+                        }}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        ออกจากระบบ (เก็บข้อมูลไว้)
+                      </button>
+                      {hasLocalData && onLogoutWithClearData && (
+                        <button 
+                          className="auth-menu-item logout-clear"
+                          onClick={() => {
+                            if (confirm('⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลทั้งหมดในเครื่องแล้วออกจากระบบ?\n\nข้อมูลบน Cloud จะยังคงอยู่')) {
+                              onLogoutWithClearData();
+                              setShowAuthMenu(false);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          ลบข้อมูลและออกจากระบบ
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <button 
+                      className="auth-menu-item login"
+                      onClick={() => {
+                        onSignIn();
+                        setShowAuthMenu(false);
+                      }}
+                    >
+                      <LogIn className="w-4 h-4" />
+                      เข้าสู่ระบบด้วย Google
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -322,7 +423,7 @@ const TodoList = ({
                   setIsUserNameModalOpen(false);
                   const monthLabel = selectedMonth === 'all' 
                     ? undefined 
-                    : monthOptions.find(o => o.key === selectedMonth)?.label;
+                    :monthOptions.find(o => o.key === selectedMonth)?.label;
                   onExportExcel(filteredTodos, monthLabel, tempUserName);
                 }}
                 className="modal-btn modal-btn-primary"

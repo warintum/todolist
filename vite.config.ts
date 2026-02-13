@@ -8,12 +8,12 @@ export default defineConfig({
   server: {
     host: true,
     port: 5174,
-    allowedHosts: ["warintum.github.io/todolist/"]
+    allowedHosts: ["p5174.doodee.cc","warintum.github.io/todolist/"]
   },
 
   preview: {
     host: true,
     port: 4141,
-    allowedHosts: ["warintum.github.io/todolist/"]
+    allowedHosts: ["p4141.doodee.cc","warintum.github.io/todolist/"]
   }
 })
