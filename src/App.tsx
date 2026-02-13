@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { Todo, TodoFilter } from './utils/todoTypes';
 import TodoList from './components/TodoList';
 import { DataMergeModal } from './components/DataMergeModal';
+import { LogoutConfirmModal } from './components/LogoutConfirmModal';
 import { exportTodosAsExcel } from './utils/excelExport';
 import { useToast } from './contexts/ToastContext';
 import { useAuth } from './contexts/AuthContext';
@@ -313,6 +314,9 @@ function App() {
   const [pendingCloudTodos, setPendingCloudTodos] = useState<Todo[]>([]);
   const [pendingLocalTodos, setPendingLocalTodos] = useState<Todo[]>([]);
   const hasShownMergeModal = useRef(false);
+  
+  // Logout confirm modal state
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Process pending operations when coming back online
   const processPendingOperations = useCallback(async () => {
@@ -764,30 +768,36 @@ function App() {
     }
   };
 
-  const handleLogout = async () => {
+  // Show logout confirm modal
+  const handleShowLogoutConfirm = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  // Handle logout with keeping data
+  const handleLogoutKeepData = async () => {
+    setShowLogoutConfirm(false);
     try {
       await logout();
       hasShownMergeModal.current = false; // Reset for next login
       // Note: We keep lastSyncedUserId so we know which user was last synced
-      showToast('👋 ออกจากระบบสำเร็จ', 'info', 3000);
+      showToast('👋 ออกจากระบบสำเร็จ (เก็บข้อมูลไว้)', 'info', 3000);
     } catch (error) {
       console.error('Logout error:', error);
       showToast('❌ ออกจากระบบล้มเหลว', 'error', 3000);
     }
   };
 
-  // Clear all local data (IndexedDB + localStorage todos)
-  const clearAllLocalData = async () => {
+  // Handle logout with clearing data
+  const handleLogoutClearData = async () => {
+    setShowLogoutConfirm(false);
+    
+    // Clear local data first
     try {
-      // Clear IndexedDB - handle case where stores might not exist
       if (!db) {
         db = await initDB();
       }
       
-      // Check which stores exist
       const storeNames = Array.from(db!.objectStoreNames);
-      
-      // Only clear stores that exist
       const storesToClear = [];
       if (storeNames.includes(STORE_NAME)) {
         storesToClear.push(STORE_NAME);
@@ -798,40 +808,32 @@ function App() {
       
       if (storesToClear.length > 0) {
         const transaction = db!.transaction(storesToClear, 'readwrite');
-        
         for (const storeName of storesToClear) {
           const store = transaction.objectStore(storeName);
           await promisifyRequest(store.clear());
         }
-        
         await waitForTransaction(transaction);
       }
-      
-      // Clear localStorage todos (keep darkMode and userName)
-      localStorage.removeItem('todos');
       
       // Clear state
       setTodos([]);
       
-      return true;
-    } catch (error) {
-      console.error('Failed to clear local data:', error);
-      // Try to clear state at least
-      setTodos([]);
-      return false;
-    }
-  };
-
-  const handleLogoutWithClearData = async () => {
-    const cleared = await clearAllLocalData();
-    if (cleared) {
-      setLastSyncedUserId(null); // Clear last synced user since data is gone
+      // Then logout
       await logout();
+      hasShownMergeModal.current = false;
+      setLastSyncedUserId(null);
+      
       showToast('🗑️ ลบข้อมูลและออกจากระบบสำเร็จ', 'info', 3000);
-    } else {
+    } catch (error) {
+      console.error('Failed to clear data and logout:', error);
       showToast('⚠️ ลบข้อมูลไม่สำเร็จ แต่ออกจากระบบแล้ว', 'error', 3000);
       await logout();
     }
+  };
+
+  // Handle cancel logout
+  const handleCancelLogout = () => {
+    setShowLogoutConfirm(false);
   };
 
   const exportTodosAsCSV = () => {
@@ -966,6 +968,16 @@ function App() {
         onCancel={handleCancelMerge}
       />
       
+      {/* Logout Confirm Modal */}
+      <LogoutConfirmModal
+        isOpen={showLogoutConfirm}
+        user={user}
+        localDataCount={todos.length}
+        onKeepData={handleLogoutKeepData}
+        onDeleteData={handleLogoutClearData}
+        onCancel={handleCancelLogout}
+      />
+      
       <input
         ref={fileInputRef}
         type="file"
@@ -999,9 +1011,8 @@ function App() {
         onToggleDarkMode={() => setIsDarkMode(!isDarkMode)}
         onUserNameChange={setUserName}
         onSignIn={handleSignIn}
-        onLogout={handleLogout}
-        onLogoutWithClearData={handleLogoutWithClearData}
-        hasLocalData={todos.length > 0}
+        onLogout={handleLogoutKeepData}
+        onShowLogoutConfirm={handleShowLogoutConfirm}
       />
       
       <CommandPalette

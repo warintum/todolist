@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent, useCallback } from 'react';
 import type { Todo, TodoFilter } from '../utils/todoTypes';
 import { cn } from '../utils/cn';
-import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet, X, User, LogIn, LogOut, Cloud, CloudOff, Loader2, Trash2 } from 'lucide-react';
+import { Plus, Filter, Moon, Sun, Download, Upload, FileSpreadsheet, X, User, LogIn, LogOut, Cloud, CloudOff, Loader2 } from 'lucide-react';
 import TodoItem from './TodoItem';
 import type { User as FirebaseUser } from 'firebase/auth';
 
@@ -25,8 +25,7 @@ interface TodoListProps {
   onUserNameChange: (name: string) => void;
   onSignIn: () => void;
   onLogout: () => void;
-  onLogoutWithClearData?: () => void;
-  hasLocalData?: boolean;
+  onShowLogoutConfirm?: () => void;
 }
 
 const TodoList = ({
@@ -48,9 +47,8 @@ const TodoList = ({
   onToggleDarkMode,
   onUserNameChange,
   onSignIn,
-  onLogout,
-  onLogoutWithClearData,
-  hasLocalData = false,
+  onLogout: _onLogout,
+  onShowLogoutConfirm,
 }: TodoListProps) => {
   const [newTodoText, setNewTodoText] = useState('');
   const [newTodoPriority, setNewTodoPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -175,27 +173,13 @@ const TodoList = ({
                       <button 
                         className="auth-menu-item logout"
                         onClick={() => {
-                          onLogout();
+                          onShowLogoutConfirm?.();
                           setShowAuthMenu(false);
                         }}
                       >
                         <LogOut className="w-4 h-4" />
-                        ออกจากระบบ (เก็บข้อมูลไว้)
+                        ออกจากระบบ
                       </button>
-                      {hasLocalData && onLogoutWithClearData && (
-                        <button 
-                          className="auth-menu-item logout-clear"
-                          onClick={() => {
-                            if (confirm('⚠️ คุณแน่ใจหรือไม่ว่าต้องการลบข้อมูลทั้งหมดในเครื่องแล้วออกจากระบบ?\n\nข้อมูลบน Cloud จะยังคงอยู่')) {
-                              onLogoutWithClearData();
-                              setShowAuthMenu(false);
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          ลบข้อมูลและออกจากระบบ
-                        </button>
-                      )}
                     </>
                   ) : (
                     <button 

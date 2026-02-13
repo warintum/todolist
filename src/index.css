@@ -2620,3 +2620,105 @@ body {
     width: 100%;
   }
 }
+
+/* ============================================
+   LOGOUT CONFIRM MODAL STYLES
+   ============================================ */
+
+.logout-confirm-modal {
+  max-width: 440px;
+}
+
+.logout-confirm-modal .modal-icon.info {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: white;
+}
+
+.logout-data-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.data-info-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--warning-600);
+}
+
+.data-info-box svg {
+  flex-shrink: 0;
+}
+
+.data-info-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.data-info-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.logout-warning {
+  padding: 12px 16px;
+  background: rgba(59, 130, 246, 0.08);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.logout-warning p {
+  margin: 0;
+}
+
+.logout-warning p + p {
+  margin-top: 4px;
+}
+
+.logout-no-data {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.logout-footer {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.logout-footer .modal-btn {
+  flex: 1;
+  min-width: 120px;
+}
+
+@media (max-width: 480px) {
+  .logout-footer {
+    flex-direction: column;
+  }
+  
+  .logout-footer .modal-btn {
+    width: 100%;
+  }
+}
+
+.dark .data-info-box {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.dark .logout-warning {
+  background: rgba(59, 130, 246, 0.12);
+}
